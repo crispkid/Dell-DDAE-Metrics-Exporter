@@ -1,0 +1,73 @@
+version: 1
+
+monitoring:
+  # Both pipelines default to true; at least one must remain enabled. In a
+  # site-specific resource-only unit, remove the Kafka credential override.
+  resources:
+    enabled: true
+    interval: 30s
+    stale_after: 120s
+  alerts:
+    enabled: true
+    interval: 30s
+    list_response_max_bytes: 8388608
+    detail:
+      response_max_bytes: 1048576
+      refresh_interval: 10m
+      max_per_cycle: 200
+      concurrency: 4
+
+server:
+  listen_address: 127.0.0.1:9469
+  shutdown_grace_period: 15s
+
+security:
+  # Keep false in production. A target-specific insecure flag also requires
+  # this acknowledgement, and insecure runs cannot provide release evidence.
+  allow_insecure_tls: false
+
+ddae:
+  base_url: https://ddae.example.invalid
+  source_instance: replace-with-stable-appliance-name
+  credentials:
+    # systemd LoadCredential overrides these example paths through the unit's
+    # higher-precedence environment settings.
+    username_file: /secure/runtime/ddae-username
+    password_file: /secure/runtime/ddae-password
+    client_secret_file: /secure/runtime/ddae-client-secret
+  tls:
+    ca_file: /etc/ddae-exporter/trust/ddae-ca.pem
+    # Effective only together with security.allow_insecure_tls: true. Prefer
+    # installing the correct CA; insecure runs are not release evidence.
+    insecure_skip_verify: false
+  request_timeout: 5s
+  cycle_timeout: 20s
+  response_max_bytes: 4194304
+  retry_max: 2
+
+kafka:
+  brokers:
+    - kafka.example.invalid:9093
+  topic: ddae-serviceability-alerts
+  client_id: ddae-exporter
+  tls:
+    ca_file: /etc/ddae-exporter/trust/kafka-ca.pem
+    # This target flag never affects DDAE TLS verification.
+    insecure_skip_verify: false
+  sasl:
+    mechanism: SCRAM-SHA-512
+    username: replace-with-runtime-identity
+    # systemd LoadCredential overrides this example path.
+    password_file: /secure/runtime/kafka-password
+  publish_timeout: 10s
+
+state:
+  dir: /var/lib/ddae-exporter
+  outbox_max_bytes: 1073741824
+  outbox_max_events: 100000
+  checkpoint_retention: 720h
+  checkpoint_max_alerts: 100000
+
+logging:
+  level: info
+  format: json

@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_integration:
+        description: Run authorized non-production integration and E2E stages
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  local-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: ./scripts/stage-lint.sh
+      - run: ./scripts/stage-test.sh
+      - run: ./scripts/stage-coverage.sh
+      - run: ./scripts/build.sh
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+      - run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.10.0
+      - run: ./scripts/security-policy.sh
+      - run: ./scripts/supply-chain.sh
+      - run: ./scripts/stage-ci-policy.sh
+
+  authorized-integration:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_integration && github.ref == 'refs/heads/main'
+    needs: local-gates
+    runs-on: [self-hosted, ddae-nonproduction]
+    environment: ddae-nonproduction
+    env:
+      DDAE_INTEGRATION_ENABLED: '1'
+      DDAE_E2E_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: ./scripts/stage-integration.sh
+      - run: ./scripts/stage-e2e.sh

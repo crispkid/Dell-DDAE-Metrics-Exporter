@@ -1,0 +1,10 @@
+[
+  {
+    "id": "cluster-1",
+    "clusterStatus": "available",
+    "coordinator": {"cpu": "2", "memory": "4Gi", "unknown": "ignored"},
+    "worker": {"cpu": "8", "memory": "16Gi"},
+    "objectStorage": {"endpoint": "https://synthetic.example.invalid", "credential": "excluded-synthetic-value"}
+  },
+  {"id": "cluster-future", "clusterStatus": "future-state"}
+]

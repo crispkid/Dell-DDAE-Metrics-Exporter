@@ -1,0 +1,14 @@
+[
+  {
+    "id": "node-1",
+    "state": "Ready",
+    "capacity": {"cpu": "16", "memory": "64Gi", "ephemeral-storage": "1Ti"},
+    "allocatable": {"cpu": "15", "memory": "60Gi", "ephemeral-storage": "900Gi"},
+    "conditions": [
+      {"type": "DiskPressure", "status": "False"},
+      {"type": "MemoryPressure", "status": "False"},
+      {"type": "FutureCondition", "status": "True"}
+    ],
+    "privateAddress": "192.0.2.10"
+  }
+]

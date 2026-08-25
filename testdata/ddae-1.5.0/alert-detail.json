@@ -1,0 +1,13 @@
+{
+  "id": "alert-1",
+  "type": "WARNING",
+  "acknowledged": "false",
+  "count": 2,
+  "createdon": "2026-08-24T10:00:00+08:00",
+  "message": "synthetic operator message",
+  "remedies": ["inspect synthetic node"],
+  "labels": {"credential": "excluded-synthetic-value"},
+  "links": ["https://synthetic.example.invalid"],
+  "contact": "synthetic-contact@example.invalid",
+  "unknownNested": {"value": "ignored"}
+}

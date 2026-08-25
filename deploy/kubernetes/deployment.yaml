@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ddae-exporter
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ddae-exporter-state
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ddae-exporter
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ddae-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ddae-exporter
+    spec:
+      serviceAccountName: ddae-exporter
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          image: ghcr.io/crispkid/dell-ddae-metrics-exporter:1.0.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config
+            - /etc/ddae-exporter/config.yaml
+          ports:
+            - name: metrics
+              containerPort: 9469
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ddae-exporter/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/ddae-exporter
+            - name: ddae-credentials
+              mountPath: /run/secrets/ddae
+              readOnly: true
+            - name: kafka-credentials
+              mountPath: /run/secrets/kafka
+              readOnly: true
+            - name: trust
+              mountPath: /run/trust
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: ddae-exporter
+            defaultMode: 0444
+        - name: state
+          persistentVolumeClaim:
+            claimName: ddae-exporter-state
+        - name: ddae-credentials
+          secret:
+            secretName: ddae-exporter-credentials
+            defaultMode: 0440
+        - name: kafka-credentials
+          secret:
+            secretName: ddae-exporter-kafka
+            defaultMode: 0440
+        - name: trust
+          secret:
+            secretName: ddae-exporter-trust
+            defaultMode: 0440
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ddae-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ddae-exporter
+  ports:
+    - name: metrics
+      port: 9469
+      targetPort: metrics

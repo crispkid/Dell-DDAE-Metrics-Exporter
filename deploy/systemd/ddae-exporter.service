@@ -1,0 +1,43 @@
+[Unit]
+Description=Dell DDAE Metrics Exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ddae-exporter
+Group=ddae-exporter
+LoadCredential=ddae-username:/etc/ddae-exporter/secrets/ddae-username
+LoadCredential=ddae-password:/etc/ddae-exporter/secrets/ddae-password
+LoadCredential=ddae-client-secret:/etc/ddae-exporter/secrets/ddae-client-secret
+LoadCredential=kafka-password:/etc/ddae-exporter/secrets/kafka-password
+Environment=DDAE_USERNAME_FILE=%d/ddae-username
+Environment=DDAE_PASSWORD_FILE=%d/ddae-password
+Environment=DDAE_CLIENT_SECRET_FILE=%d/ddae-client-secret
+Environment=KAFKA_SASL_PASSWORD_FILE=%d/kafka-password
+ExecStart=/usr/local/bin/ddae-exporter --config /etc/ddae-exporter/config.yaml
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+StateDirectory=ddae-exporter
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

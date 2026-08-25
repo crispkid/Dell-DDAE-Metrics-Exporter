@@ -1,0 +1,15 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ddae-exporter-default-deny
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ddae-exporter
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+
+# This committed policy intentionally denies all traffic. The operator must add
+# site-specific policies for DNS, the single DDAE origin, Kafka brokers, and an
+# mTLS-protected Prometheus path; private IPs are never committed here.
