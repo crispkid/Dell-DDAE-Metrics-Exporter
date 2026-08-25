@@ -74,55 +74,99 @@ TLS 1.2，certificate chain 與 hostname verification 預設啟用。
 
 ## Prometheus metrics
 
-### 共用 metrics
+### 共用 metrics 的單位與值域
 
-| Metric | 說明 |
+| Metric | Type | 單位 | 值域與意義 |
+|---|---|---|---|
+| `ddae_build_info{version,go_version}` | gauge | 無單位 | 固定為 `1`；labels 表示 Exporter 與 Go build version。 |
+| `ddae_monitoring_enabled{pipeline}` | gauge | boolean | `0` 或 `1`；固定輸出 `pipeline="resources"` 與 `pipeline="alerts"` 兩筆 series。 |
+| `ddae_collector_success{collector}` | gauge | boolean | `0` 或 `1`；最近一輪指定 collector 的結果，輸出已啟用 pipeline 的 collector labels。 |
+| `ddae_collector_duration_seconds{collector}` | gauge | seconds | 大於或等於 `0` 的秒數，可包含小數；輸出已啟用 pipeline 的 collector labels。 |
+
+### Resource pipeline metrics 的單位與值域
+
+| Metric | Type | 單位 | 值域與意義 |
+|---|---|---|---|
+| `ddae_up` | gauge | boolean | `0` 或 `1`；所有必要 resource collectors 成功且 snapshot 仍在 freshness window 時為 `1`。 |
+| `ddae_snapshot_age_seconds` | gauge | seconds | 大於或等於 `0` 的秒數；表示最近完整 resource snapshot 的年齡。 |
+| `ddae_management_api_up` | gauge | boolean | `0` 或 `1`；ping collector 完成有效 authenticated request 時為 `1`。 |
+| `ddae_cluster_state_info{cluster,state}` | gauge | one-hot boolean | 每筆為 `0` 或 `1`；`state` 固定為 `available`、`unknown`，每個 cluster 的目前狀態對應 series 為 `1`。 |
+| `ddae_cluster_coordinator_configured_cpu_cores{cluster}` | gauge | CPU cores | 大於或等於 `0` 的有限數值，可為小數；表示 configured CPU。 |
+| `ddae_cluster_coordinator_configured_memory_bytes{cluster}` | gauge | bytes | 大於或等於 `0` 的有限數值；由 Kubernetes quantity 轉換。 |
+| `ddae_cluster_worker_configured_cpu_cores{cluster}` | gauge | CPU cores | 大於或等於 `0` 的有限數值，可為小數；表示 worker configuration object 的 CPU quantity。 |
+| `ddae_cluster_worker_configured_memory_bytes{cluster}` | gauge | bytes | 大於或等於 `0` 的有限數值；由 worker configuration quantity 轉換。 |
+| `ddae_node_state_info{node,state}` | gauge | one-hot boolean | 每筆為 `0` 或 `1`；每個 node 的目前 normalized state 對應 series 為 `1`。 |
+| `ddae_node_ready{node}` | gauge | boolean | `0` 或 `1`；normalized node state 為 `ready` 時為 `1`。 |
+| `ddae_node_capacity_cpu_cores{node}` | gauge | CPU cores | 大於或等於 `0` 的有限數值，可為小數；表示 total capacity。 |
+| `ddae_node_capacity_memory_bytes{node}` | gauge | bytes | 大於或等於 `0` 的有限數值；表示 total memory capacity。 |
+| `ddae_node_capacity_ephemeral_storage_bytes{node}` | gauge | bytes | 大於或等於 `0` 的有限數值；表示 total ephemeral-storage capacity。 |
+| `ddae_node_allocatable_cpu_cores{node}` | gauge | CPU cores | 大於或等於 `0` 的有限數值，可為小數；表示 allocatable CPU。 |
+| `ddae_node_allocatable_memory_bytes{node}` | gauge | bytes | 大於或等於 `0` 的有限數值；表示 allocatable memory。 |
+| `ddae_node_allocatable_ephemeral_storage_bytes{node}` | gauge | bytes | 大於或等於 `0` 的有限數值；表示 allocatable ephemeral storage。 |
+| `ddae_node_condition{node,condition}` | gauge | boolean | `0` 或 `1`；`condition` 固定為 `disk_pressure`、`memory_pressure`，`1` 表示 pressure 存在。 |
+| `ddae_system_locked` | gauge | boolean | `0` 或 `1`；appliance locked 時為 `1`。 |
+| `ddae_control_plane_ready` | gauge | boolean | `0` 或 `1`；control-plane nodes ready 時為 `1`。 |
+| `ddae_nodes_ready` | gauge | nodes | `0` 到 `ddae_nodes_total` 的整數。 |
+| `ddae_nodes_total` | gauge | nodes | 大於或等於 `0` 的整數。 |
+
+CPU、memory 與 storage 欄位在 DDAE response 缺少值時省略對應 series；present value
+會先通過 Kubernetes quantity parsing，並只輸出非負有限數值。
+
+`ddae_node_state_info` 的 `state` 固定值域如下：
+
+| State | 意義 |
 |---|---|
-| `ddae_build_info{version,go_version}` | Exporter build 與 Go version。 |
-| `ddae_monitoring_enabled{pipeline}` | `resources` 與 `alerts` pipeline 的啟用狀態。 |
+| `maintenance_mode` | Node 處於 maintenance mode。 |
+| `scheduling_disabled` | Node 已停用 scheduling。 |
+| `not_ready` | Node 尚未 ready。 |
+| `ready` | Node ready。 |
+| `restarting` | Node 正在 restart。 |
+| `shutting_down` | Node 正在 shutdown。 |
+| `powered_off` | Node 已關機。 |
+| `powering_on` | Node 正在開機。 |
+| `unknown` | Source state 經 bounded normalization 後歸入 unknown。 |
 
-### Resource pipeline metrics
+### Alert pipeline metrics 的單位與值域
 
-| 類別 | Metrics |
+| Metric | Type | 單位 | 值域與意義 |
+|---|---|---|---|
+| `ddae_alert_list_complete` | gauge | boolean | `0` 或 `1`；list 結構有效且 `totalRecords` 至多為可用 result 數量時為 `1`。 |
+| `ddae_alert_detail_deferred` | gauge | alerts | 大於或等於 `0` 的整數；表示最近一輪因 `max_per_cycle` 延後的 alert IDs。 |
+| `ddae_alert_pipeline_ready` | gauge | boolean | `0` 或 `1`；list/detail、persistent state 與 outbox capacity 符合條件時為 `1`。 |
+| `ddae_kafka_publish_success` | gauge | boolean | `0` 或 `1`；最近一次 required Kafka publish batch 已取得 acknowledgement 時為 `1`。 |
+| `ddae_kafka_publish_duration_seconds` | gauge | seconds | 大於或等於 `0` 的秒數，可包含小數。 |
+| `ddae_kafka_events_published_total` | counter | events | 大於或等於 `0` 的整數；程序運行期間單調增加，計算 Kafka 已確認的 events。 |
+| `ddae_kafka_events_failed_total{reason}` | counter | events | 大於或等於 `0` 的整數；程序運行期間依固定 failure class 單調增加。 |
+| `ddae_kafka_buffered_events` | gauge | events | `0` 到 `state.outbox_max_events` 的整數；byte hard limit 也可能先限制可保存數量。 |
+
+固定 label 值域如下：
+
+| Label | 固定值域 |
 |---|---|
-| Collector | `ddae_up`、`ddae_collector_success{collector}`、`ddae_collector_duration_seconds{collector}`、`ddae_snapshot_age_seconds` |
-| DDAE API | `ddae_management_api_up` |
-| Cluster | `ddae_cluster_state_info{cluster,state}`、`ddae_cluster_coordinator_configured_cpu_cores`、`ddae_cluster_coordinator_configured_memory_bytes`、`ddae_cluster_worker_configured_cpu_cores`、`ddae_cluster_worker_configured_memory_bytes` |
-| Node state | `ddae_node_state_info{node,state}`、`ddae_node_ready`、`ddae_node_condition{node,condition}` |
-| Node capacity | `ddae_node_capacity_cpu_cores`、`ddae_node_capacity_memory_bytes`、`ddae_node_capacity_ephemeral_storage_bytes` |
-| Node allocatable | `ddae_node_allocatable_cpu_cores`、`ddae_node_allocatable_memory_bytes`、`ddae_node_allocatable_ephemeral_storage_bytes` |
-| Appliance | `ddae_system_locked`、`ddae_control_plane_ready`、`ddae_nodes_ready`、`ddae_nodes_total` |
+| `pipeline` | `resources`、`alerts` |
+| `collector` | `ping`、`clusters`、`nodes`、`lock`、`power`、`alert_list`、`alert_detail`；僅輸出已啟用 pipeline 的 collectors。 |
+| Cluster `state` | `available`、`unknown` |
+| Node `state` | `maintenance_mode`、`scheduling_disabled`、`not_ready`、`ready`、`restarting`、`shutting_down`、`powered_off`、`powering_on`、`unknown` |
+| `condition` | `disk_pressure`、`memory_pressure` |
+| `reason` | `auth`、`tls`、`timeout`、`transport`、`http`、`decode`、`validation`、`kafka_auth`、`kafka_timeout`、`kafka_rejected`、`buffer_full`、`internal` |
 
-### Alert pipeline metrics
-
-| Metric | 說明 |
-|---|---|
-| `ddae_alert_list_complete` | 本輪 alert list 完整狀態。 |
-| `ddae_alert_detail_deferred` | 依 per-cycle 上限延後處理的 detail 數量。 |
-| `ddae_alert_pipeline_ready` | Alert pipeline readiness。 |
-| `ddae_kafka_publish_success` | 最近一次 Kafka publish 結果。 |
-| `ddae_kafka_publish_duration_seconds` | Kafka publish 耗時。 |
-| `ddae_kafka_events_published_total` | 成功發布事件總數。 |
-| `ddae_kafka_events_failed_total{reason}` | 依固定 failure class 分類的失敗事件總數。 |
-| `ddae_kafka_buffered_events` | Durable outbox 目前保存的事件數。 |
-
-Metric type、help、label 與語意使用固定的 v1 contract。Site、environment、region 等
-部署維度可由 Prometheus service discovery 或 relabeling 加入。
+Site、environment、region 等部署維度可由 Prometheus service discovery 或
+relabeling 加入。
 
 ## Kafka alert event
 
 每筆 event 使用 typed JSON 與固定的 schema contract：
 
-| Field | 值或來源 |
-|---|---|
-| `schema_version` | 固定為 `1.0`。 |
-| `event_type` | 固定為 `ddae.serviceability_alert.upsert`。 |
-| `source_system` | 固定為 `dell_ddae`。 |
-| `source_instance` | YAML 中設定的穩定 appliance identity。 |
-| `alert_id` | Alert list 與 detail response 對應的 ID。 |
-| `content_hash_sha256` | Canonical normalized `alert` object 的 SHA-256。 |
-| `observed_at` | UTC RFC 3339 observation time。 |
-| `alert` | 僅含核准 typed fields 的 object。 |
+| Field | JSON type | 值域或來源 |
+|---|---|---|
+| `schema_version` | string | 固定為 `1.0`。 |
+| `event_type` | string | 固定為 `ddae.serviceability_alert.upsert`。 |
+| `source_system` | string | 固定為 `dell_ddae`。 |
+| `source_instance` | string | YAML 中設定的穩定 appliance identity；1–128 UTF-8 bytes。 |
+| `alert_id` | string | 1–256 個 ASCII 字元，使用英數字、`.`、`_`、`:`、`-`，並與 requested list ID 相同。 |
+| `content_hash_sha256` | string | Canonical normalized `alert` object 的 64 字元小寫 SHA-256 hex。 |
+| `observed_at` | string | UTC RFC 3339 observation time。 |
+| `alert` | object | 僅含下列 typed allowlist fields。 |
 
 `alert` object 可包含 `severity`、`acknowledged`、`occurrence_count`、`created_at`、
 `updated_at`、`clear_type`、`auto_clear_timeout_raw`、`app_name`、`component`、
@@ -136,6 +180,60 @@ Metric type、help、label 與語意使用固定的 v1 contract。Site、environ
 | Header | `ddae-schema-version=1.0`。 |
 | Delivery | Durable outbox 搭配 at-least-once 發布；hard timeout 後不確認或刪除不確定的 record，重播可能產生相同 key 的 duplicate，consumer 必須依 record key 執行 idempotent upsert。 |
 | Event size | 最大 256 KiB。 |
+
+### 告警 JSON 範本
+
+以下是 repository sanitized fixture 對應的實際 event shape。範例中的
+`content_hash_sha256` 是 `alert` object canonical JSON 的實際 SHA-256，時間已轉為 UTC；
+source 未提供的 optional fields 會從輸出省略。
+
+```json
+{
+  "schema_version": "1.0",
+  "event_type": "ddae.serviceability_alert.upsert",
+  "source_system": "dell_ddae",
+  "source_instance": "fixture-site",
+  "alert_id": "alert-1",
+  "content_hash_sha256": "49ccb1aaa6bbe2aecdfddba289a1ac720e153a14b1e59fe14380086233d513ea",
+  "observed_at": "2026-08-24T03:00:00Z",
+  "alert": {
+    "severity": "warning",
+    "acknowledged": false,
+    "occurrence_count": 2,
+    "created_at": "2026-08-24T02:00:00Z",
+    "message": "synthetic operator message",
+    "remedies": [
+      "inspect synthetic node"
+    ]
+  }
+}
+```
+
+Alert 欄位型別與值域：
+
+| Field | JSON type | 值域／上限 |
+|---|---|---|
+| `severity` | string | `critical`、`error`、`warning`、`info`、`normal`、`unknown`。 |
+| `acknowledged` | boolean | `true` 或 `false`。 |
+| `occurrence_count` | integer | 大於或等於 `0`。 |
+| `created_at`、`updated_at` | string | UTC RFC 3339 timestamp。 |
+| `clear_type` | string | 最多 64 UTF-8 bytes。 |
+| `auto_clear_timeout_raw` | integer | 大於或等於 `0`；Dell 1.5.0 未定義此 raw value 的單位。 |
+| `app_name`、`component`、`namespace` | string | 每個欄位最多 256 UTF-8 bytes。 |
+| `message` | string | 最多 8192 UTF-8 bytes。 |
+| `reason` | string | 最多 4096 UTF-8 bytes。 |
+| `remedies` | array of strings | 最多 32 筆，每筆最多 2048 UTF-8 bytes。 |
+| `resource_id`、`related` | string | 最多 512 UTF-8 bytes。 |
+| `symptom_id` | string | 最多 256 UTF-8 bytes。 |
+| `related_events` | array of typed objects | 最多 100 筆；每筆使用相同 optional fields，並維持一層結構。 |
+
+Kafka consumer 可用下列固定 metadata 辨識資料：
+
+| Metadata | 值 |
+|---|---|
+| Record key | `SHA-256(source_instance + NUL + alert_id)` 的 64 字元小寫 hex。 |
+| `content-type` header | `application/json` |
+| `ddae-schema-version` header | `1.0` |
 
 ## 安裝前準備
 
@@ -205,6 +303,98 @@ chmod 0600 config.local.yaml
 本機啟用 alert pipeline 時，請將 `state.dir` 設為剛建立之 `state` directory 的
 absolute path。
 
+### 建立 credential files
+
+每個 `*_file` 都是一個 regular file，內容只放該欄位的原始值。檔案內容採 valid
+UTF-8、最大 64 KiB；Exporter 會移除一個尾端 `LF`、`CRLF` 或 `CR`。下表使用的是
+安全佔位值：
+
+| YAML key | 範例 path | 單行範例內容 | 內容來源 |
+|---|---|---|---|
+| `ddae.credentials.username_file` | `/secure/runtime/ddae-username` | `ddae-exporter-reader` | DDAE dedicated read-only identity。 |
+| `ddae.credentials.password_file` | `/secure/runtime/ddae-password` | `REPLACE_WITH_DDAE_READ_ONLY_PASSWORD` | 該 DDAE identity 的 password。 |
+| `ddae.credentials.client_secret_file` | `/secure/runtime/ddae-client-secret` | `REPLACE_WITH_DV_ADMIN_REST_CLIENT_SECRET` | DDAE 管理者提供的 `dv-admin-rest` client secret。 |
+| `kafka.sasl.password_file` | `/secure/runtime/kafka-password` | `REPLACE_WITH_KAFKA_SASL_PASSWORD` | Kafka SASL identity 的 password；SASL 啟用時使用。 |
+
+例如 `/secure/runtime/ddae-username` 的檔案內容是：
+
+```text
+ddae-exporter-reader
+```
+
+`/secure/runtime/ddae-password` 的格式是：
+
+```text
+REPLACE_WITH_DDAE_READ_ONLY_PASSWORD
+```
+
+`/secure/runtime/ddae-client-secret` 的格式是：
+
+```text
+REPLACE_WITH_DV_ADMIN_REST_CLIENT_SECRET
+```
+
+檔案內使用純值，不加 `username=`、`password=`、YAML key、JSON object 或引號。實際
+值也可在本機互動輸入；以下命令從 repository root 建立 mode `0600` 的四個 files，
+password 與 client secret 以 silent input 讀取，因此值本身不會成為命令列參數：
+
+```bash
+install -d -m 0700 secrets
+umask 077
+printf 'DDAE username: '
+IFS= read -r ddae_username_value
+printf 'DDAE password: '
+IFS= read -r -s ddae_password_value
+printf '\nDDAE dv-admin-rest client secret: '
+IFS= read -r -s ddae_client_secret_value
+printf '\nKafka SASL password: '
+IFS= read -r -s kafka_password_value
+printf '\n'
+printf '%s' "$ddae_username_value" > secrets/ddae-username
+printf '%s' "$ddae_password_value" > secrets/ddae-password
+printf '%s' "$ddae_client_secret_value" > secrets/ddae-client-secret
+printf '%s' "$kafka_password_value" > secrets/kafka-password
+chmod 0600 secrets/ddae-username secrets/ddae-password \
+  secrets/ddae-client-secret secrets/kafka-password
+unset ddae_username_value ddae_password_value ddae_client_secret_value kafka_password_value
+```
+
+若組織的 secret manager 已輸出受控來源檔，可在 Linux service account 建立後安裝至
+Exporter runtime directory：
+
+```bash
+sudo install -d -o ddae-exporter -g ddae-exporter -m 0700 /secure/runtime
+sudo install -o ddae-exporter -g ddae-exporter -m 0600 \
+  /path/from/secret-manager/ddae-username /secure/runtime/ddae-username
+sudo install -o ddae-exporter -g ddae-exporter -m 0600 \
+  /path/from/secret-manager/ddae-password /secure/runtime/ddae-password
+sudo install -o ddae-exporter -g ddae-exporter -m 0600 \
+  /path/from/secret-manager/ddae-client-secret /secure/runtime/ddae-client-secret
+sudo install -o ddae-exporter -g ddae-exporter -m 0600 \
+  /path/from/secret-manager/kafka-password /secure/runtime/kafka-password
+```
+
+Resource-only 模式使用前三個 DDAE files。Dual 與 alert-only 模式依 Kafka SASL 設定
+加入 `kafka-password`。以目前登入帳號進行本機測試時，可將受控來源檔安裝到 repository
+內已由 `.gitignore` 排除的 `secrets/` directory，並在 YAML 填入 absolute paths：
+
+```bash
+install -d -m 0700 secrets
+install -m 0600 /path/from/secret-manager/ddae-username secrets/ddae-username
+install -m 0600 /path/from/secret-manager/ddae-password secrets/ddae-password
+install -m 0600 /path/from/secret-manager/ddae-client-secret secrets/ddae-client-secret
+install -m 0600 /path/from/secret-manager/kafka-password secrets/kafka-password
+```
+
+| 檢查項目 | 預期值 |
+|---|---|
+| File type | Regular file。 |
+| Parent directory mode | `0700`。 |
+| Credential file mode | `0600`。 |
+| Owner | 執行 Exporter 的 account。 |
+| Content | 單一非空 UTF-8 value，最大 64 KiB。 |
+| YAML path | Exporter runtime 可讀取的 absolute path。 |
+
 ### 啟動
 
 ```bash
@@ -234,73 +424,76 @@ variables 啟動。
 YAML 使用 `version: 1`、單一 UTF-8 document、最大 1 MiB，並以 documented keys
 進行 strict typed validation。Secret 欄位使用檔案路徑。
 
-以下範例展示 dual mode 的完整結構；`.invalid` 與 `replace-with-*` 為部署時要替換的
-範例值：
+以下範例展示 dual mode 的完整結構；每個非空設定行都有 inline 說明，inline comments
+本身也是有效 YAML。`.invalid`、`replace-with-*` 與 `/secure/runtime/*` 是部署時要換成
+實際值或實際 path 的範例：
 
 ```yaml
-version: 1
+version: 1 # 設定格式版本；目前固定使用整數 1。
 
-monitoring:
-  resources:
-    enabled: true
-    interval: 30s
-    stale_after: 120s
-  alerts:
-    enabled: true
-    interval: 30s
-    list_response_max_bytes: 8388608
-    detail:
-      response_max_bytes: 1048576
-      refresh_interval: 10m
-      max_per_cycle: 200
-      concurrency: 4
+monitoring: # 兩條 monitoring pipelines 的父區段。
+  resources: # Prometheus resource metrics pipeline。
+    enabled: true # true 啟用 ping/clusters/nodes/lock/power collectors。
+    interval: 30s # Resource background collection interval，使用 Go duration。
+    stale_after: 120s # Snapshot freshness window，設定值需大於 resource interval。
+  alerts: # DDAE alert detail 到 Kafka 的 pipeline。
+    enabled: true # true 啟用 alert list/detail、outbox 與 Kafka producer。
+    interval: 30s # Alert-list background collection interval，使用 Go duration。
+    list_response_max_bytes: 8388608 # 單次 alert-list response 上限，單位 bytes。
+    detail: # Per-alert detail retrieval limits。
+      response_max_bytes: 1048576 # 每筆 alert-detail response 上限，單位 bytes。
+      refresh_interval: 10m # 已存在 alert 的重新讀取間隔，至少等於 alert interval。
+      max_per_cycle: 200 # 每輪最多 detail requests，允許範圍 1–10000。
+      concurrency: 4 # 同時 detail requests，範圍 1–128 且至多等於 max_per_cycle。
 
-server:
-  listen_address: 127.0.0.1:9469
-  shutdown_grace_period: 15s
+server: # Exporter HTTP server 設定。
+  listen_address: 127.0.0.1:9469 # 明確 host:port；container/Kubernetes 使用 0.0.0.0:9469。
+  shutdown_grace_period: 15s # Cancellation、state sync 與 HTTP shutdown 的總時間。
 
-security:
-  allow_insecure_tls: false
+security: # 跨 target 的安全確認設定。
+  allow_insecure_tls: false # true 表示明確允許個別 target 啟用 insecure diagnostic mode。
 
-ddae:
-  base_url: https://ddae.example.invalid
-  source_instance: replace-with-stable-appliance-name
-  credentials:
-    username_file: /secure/runtime/ddae-username
-    password_file: /secure/runtime/ddae-password
-    client_secret_file: /secure/runtime/ddae-client-secret
-  tls:
-    ca_file: /etc/ddae-exporter/trust/ddae-ca.pem
-    insecure_skip_verify: false
-  request_timeout: 5s
-  cycle_timeout: 20s
-  response_max_bytes: 4194304
-  retry_max: 2
+ddae: # Dell DDAE Management API client 設定。
+  base_url: https://ddae.example.invalid # 單一 HTTPS origin；填入實際 scheme、host 與 optional port。
+  source_instance: replace-with-stable-appliance-name # Kafka source identity；alert pipeline 啟用時必填。
+  credentials: # DDAE OAuth password-grant credential file paths。
+    username_file: /secure/runtime/ddae-username # 內容只放 dedicated read-only username。
+    password_file: /secure/runtime/ddae-password # 內容只放該 DDAE identity password。
+    client_secret_file: /secure/runtime/ddae-client-secret # 內容只放 dv-admin-rest client secret。
+  tls: # DDAE HTTPS trust 設定。
+    ca_file: /etc/ddae-exporter/trust/ddae-ca.pem # 額外 PEM CA bundle；使用 system roots 時可省略此行。
+    insecure_skip_verify: false # 與 allow_insecure_tls 同為 true 時，關閉 DDAE certificate/hostname verification。
+  request_timeout: 5s # 單次 token 或 DDAE request deadline，需小於 cycle_timeout。
+  cycle_timeout: 20s # 單輪 aggregate deadline，需小於每條 enabled pipeline interval。
+  response_max_bytes: 4194304 # 一般 DDAE response body 上限，單位 bytes。
+  retry_max: 2 # 初次 safe request 後的 retry 次數，允許範圍 0–10。
 
-kafka:
-  brokers:
-    - kafka.example.invalid:9093
-  topic: ddae-serviceability-alerts
-  client_id: ddae-exporter
-  tls:
-    ca_file: /etc/ddae-exporter/trust/kafka-ca.pem
-    insecure_skip_verify: false
-  sasl:
-    mechanism: SCRAM-SHA-512
-    username: replace-with-runtime-identity
-    password_file: /secure/runtime/kafka-password
-  publish_timeout: 10s
+kafka: # Alert pipeline 的 Kafka producer 設定。
+  brokers: # Kafka bootstrap broker sequence，alert pipeline 啟用時需要 1–64 筆。
+    - kafka.example.invalid:9093 # 單一 broker host:port；增加 broker 時重複此 list item。
+  topic: ddae-serviceability-alerts # Dedicated topic，最多 249 bytes。
+  client_id: ddae-exporter # Kafka client ID，1–128 bytes。
+  tls: # Kafka broker TLS 與 optional mTLS 設定。
+    ca_file: /etc/ddae-exporter/trust/kafka-ca.pem # 額外 broker PEM CA bundle；system roots 可省略。
+    # client_cert_file: /secure/runtime/kafka-client.crt # Optional mTLS client certificate PEM。
+    # client_key_file: /secure/runtime/kafka-client.key # Optional mTLS private key；與 certificate 成對設定。
+    insecure_skip_verify: false # 與 allow_insecure_tls 同為 true 時，關閉 Kafka certificate/hostname verification。
+  sasl: # Optional Kafka SASL authentication；本例使用 SCRAM-SHA-512。
+    mechanism: SCRAM-SHA-512 # 可用 PLAIN、SCRAM-SHA-256、SCRAM-SHA-512。
+    username: replace-with-runtime-identity # SASL mechanism 啟用時使用的 Kafka username。
+    password_file: /secure/runtime/kafka-password # 內容只放 Kafka SASL password。
+  publish_timeout: 10s # 每筆 produce acknowledgement hard deadline，最小 1s。
 
-state:
-  dir: /var/lib/ddae-exporter
-  outbox_max_bytes: 1073741824
-  outbox_max_events: 100000
-  checkpoint_retention: 720h
-  checkpoint_max_alerts: 100000
+state: # Alert outbox 與 checkpoint 的 persistent bbolt state。
+  dir: /var/lib/ddae-exporter # Alert pipeline 使用的 absolute writable directory。
+  outbox_max_bytes: 1073741824 # Outbox payload byte hard limit，單位 bytes。
+  outbox_max_events: 100000 # Outbox record hard limit，允許範圍 1–10000000。
+  checkpoint_retention: 720h # Alert 從 list 消失後的 checkpoint retention。
+  checkpoint_max_alerts: 100000 # Retained alert checkpoints 上限，範圍 1–10000000。
 
-logging:
-  level: info
-  format: json
+logging: # Structured application logging 設定。
+  level: info # 可用 debug、info、warn、error。
+  format: json # 可用 json、text。
 ```
 
 ### Pipeline、DDAE 與 HTTP
@@ -392,7 +585,8 @@ Logs 使用 component 與固定 failure class，涵蓋 `auth`、`tls`、`timeout
 
 Target-specific 設定彼此獨立，因此可只調整 DDAE 或只調整 Kafka。Effective insecure
 target 會在 startup 輸出一次固定 warning；TLS minimum 仍為 1.2。一般部署使用正確的
-CA 並維持三個欄位為 `false`。
+CA 並維持三個欄位為 `false`。Global flag 為 `true`、target flag 為 `false` 時仍執行
+完整驗證；target insecure mode 與同一 target 的 `ca_file` 採二選一設定。
 
 ### Secret files 與環境變數
 
