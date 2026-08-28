@@ -73,7 +73,9 @@ func TestDeploymentProfilesUseStrictYAMLAndSeparateSecrets(t *testing.T) {
 	} {
 		content := repositoryFile(t, file...)
 		for _, required := range []string{
-			"version: 1", "monitoring:", "resources:", "alerts:",
+			"version: 1", "monitoring:", "resources:", "alerts:", "serviceability_logs:",
+			"serviceability_logs_topic: ddae-serviceability-logs",
+			"serviceability_logs_outbox_max_bytes:",
 			"allow_insecure_tls: false", "insecure_skip_verify: false",
 		} {
 			if !strings.Contains(content, required) {

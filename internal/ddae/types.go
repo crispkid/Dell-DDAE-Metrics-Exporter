@@ -117,6 +117,92 @@ type AlertDetail struct {
 	Events           []RelatedAlertRaw `json:"events"`
 }
 
+type ServiceabilityLogList struct {
+	Results      []ServiceabilityLogListItem `json:"results"`
+	Threshold    *int64                      `json:"threshold"`
+	TotalRecords *int64                      `json:"totalRecords"`
+	// Malformed records whether the weakly typed list omitted or malformed any
+	// field needed to prove that the returned ID set is complete. Valid items
+	// remain available so the caller can safely refresh those details.
+	Malformed bool `json:"-"`
+}
+
+func (l *ServiceabilityLogList) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Results      json.RawMessage `json:"results"`
+		Threshold    json.RawMessage `json:"threshold"`
+		TotalRecords json.RawMessage `json:"totalRecords"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*l = ServiceabilityLogList{}
+
+	var results []json.RawMessage
+	if isMissingOrNull(raw.Results) || json.Unmarshal(raw.Results, &results) != nil {
+		l.Malformed = true
+	} else {
+		for _, encoded := range results {
+			var item ServiceabilityLogListItem
+			if err := json.Unmarshal(encoded, &item); err != nil {
+				l.Malformed = true
+				continue
+			}
+			l.Results = append(l.Results, item)
+		}
+	}
+
+	if !isMissingOrNull(raw.Threshold) {
+		var threshold int64
+		if err := json.Unmarshal(raw.Threshold, &threshold); err != nil {
+			l.Malformed = true
+		} else {
+			l.Threshold = &threshold
+		}
+	}
+	if isMissingOrNull(raw.TotalRecords) {
+		l.Malformed = true
+	} else {
+		var total int64
+		if err := json.Unmarshal(raw.TotalRecords, &total); err != nil {
+			l.Malformed = true
+		} else {
+			l.TotalRecords = &total
+		}
+	}
+	return nil
+}
+
+func isMissingOrNull(data json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(data)
+	return len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null"))
+}
+
+type ServiceabilityLogListItem struct {
+	ID        string  `json:"id"`
+	UpdatedOn *string `json:"updatedon"`
+}
+
+// ServiceabilityLogDetail deliberately models only the documented DDAE-4
+// allowlist. encoding/json ignores labels, links, and unknown source fields.
+type ServiceabilityLogDetail struct {
+	ID           string   `json:"id"`
+	Type         *string  `json:"type"`
+	Acknowledged *string  `json:"acknowledged"`
+	Count        *int64   `json:"count"`
+	CreatedOn    *string  `json:"createdon"`
+	UpdatedOn    *string  `json:"updatedon"`
+	AppName      *string  `json:"appname"`
+	Component    *string  `json:"component"`
+	Namespace    *string  `json:"namespace"`
+	Message      *string  `json:"message"`
+	Reason       *string  `json:"reason"`
+	Remedies     []string `json:"remedies"`
+	ResourceID   *string  `json:"resourceID"`
+	SymptomID    *string  `json:"symptomid"`
+	Related      *string  `json:"related"`
+}
+
 type RelatedAlertRaw struct {
 	Type             *string  `json:"type"`
 	Acknowledged     *string  `json:"acknowledged"`

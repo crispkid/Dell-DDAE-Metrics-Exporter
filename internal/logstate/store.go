@@ -1,4 +1,4 @@
-package outbox
+package logstate
 
 import (
 	"bytes"
@@ -12,8 +12,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/crispkid/dell-ddae-metrics-exporter/internal/alerts"
+	"github.com/crispkid/dell-ddae-metrics-exporter/internal/ddae"
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/observability"
+	"github.com/crispkid/dell-ddae-metrics-exporter/internal/serviceability"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -29,16 +30,16 @@ var (
 
 type FullError struct{}
 
-func (FullError) Error() string                     { return "durable outbox is full" }
+func (FullError) Error() string                     { return "serviceability log outbox is full" }
 func (FullError) FailureClass() observability.Class { return observability.ClassBufferFull }
 
 type CorruptionError struct{ reason string }
 
 func (e CorruptionError) Error() string {
 	if e.reason == "" {
-		return "persistent state is corrupt"
+		return "serviceability log state is corrupt"
 	}
-	return "persistent state is corrupt: " + e.reason
+	return "serviceability log state is corrupt: " + e.reason
 }
 func (CorruptionError) FailureClass() observability.Class { return observability.ClassInternal }
 
@@ -60,7 +61,7 @@ type Store struct {
 
 type Record struct {
 	Sequence    uint64 `json:"sequence"`
-	AlertID     string `json:"alert_id"`
+	LogID       string `json:"log_id"`
 	RecordKey   []byte `json:"record_key"`
 	Payload     []byte `json:"payload"`
 	ContentHash string `json:"content_hash"`
@@ -68,7 +69,7 @@ type Record struct {
 }
 
 type Checkpoint struct {
-	AlertID       string `json:"alert_id"`
+	LogID         string `json:"log_id"`
 	ListMarker    string `json:"list_marker,omitempty"`
 	PendingHash   string `json:"pending_hash,omitempty"`
 	DeliveredHash string `json:"delivered_hash,omitempty"`
@@ -78,14 +79,15 @@ type Checkpoint struct {
 }
 
 type Stats struct {
-	Events int
-	Bytes  int64
-	Full   bool
+	Events      int
+	Bytes       int64
+	Checkpoints int
+	Full        bool
 }
 
 func Open(options Options) (*Store, error) {
 	if options.StateDir == "" || options.MaxBytes <= 0 || options.MaxEvents <= 0 || options.MaxCheckpoints <= 0 || options.Retention <= 0 {
-		return nil, errors.New("invalid outbox options")
+		return nil, errors.New("invalid serviceability log state options")
 	}
 	if err := os.MkdirAll(options.StateDir, 0o700); err != nil {
 		return nil, errors.New("cannot create STATE_DIR")
@@ -93,14 +95,14 @@ func Open(options Options) (*Store, error) {
 	if err := os.Chmod(options.StateDir, 0o700); err != nil {
 		return nil, errors.New("cannot protect STATE_DIR")
 	}
-	path := filepath.Join(options.StateDir, "state.db")
+	path := filepath.Join(options.StateDir, "serviceability-logs.db")
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: time.Second})
 	if err != nil {
-		return nil, errors.New("cannot open persistent state")
+		return nil, errors.New("cannot open serviceability log state")
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		_ = db.Close()
-		return nil, errors.New("cannot protect persistent state")
+		return nil, errors.New("cannot protect serviceability log state")
 	}
 	store := &Store{db: db, maxBytes: options.MaxBytes, maxEvents: options.MaxEvents, maxCheckpoints: options.MaxCheckpoints, retention: options.Retention}
 	if err := db.Update(func(tx *bolt.Tx) error {
@@ -127,55 +129,53 @@ func Open(options Options) (*Store, error) {
 		if errors.As(err, &classified) {
 			return nil, err
 		}
-		return nil, errors.New("cannot initialize persistent state")
+		return nil, errors.New("cannot initialize serviceability log state")
 	}
 	return store, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) Enqueue(event alerts.EncodedEvent, marker string, observedAt time.Time) (bool, error) {
+func (s *Store) Enqueue(event serviceability.EncodedEvent, marker string, observedAt time.Time) (bool, error) {
 	inserted := false
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		outbox := tx.Bucket(bucketOutbox)
 		checkpoints := tx.Bucket(bucketCheckpoints)
 		meta := tx.Bucket(bucketMeta)
-		checkpoint, err := readCheckpoint(checkpoints.Get([]byte(event.Event.AlertID)))
+		checkpoint, err := readCheckpoint(checkpoints.Get([]byte(event.Event.LogID)))
 		if err != nil {
 			return err
 		}
-		if checkpoint.AlertID == "" {
+		if checkpoint.LogID == "" {
 			if checkpoints.Stats().KeyN >= s.maxCheckpoints {
 				return FullError{}
 			}
-			checkpoint.AlertID = event.Event.AlertID
+			checkpoint.LogID = event.Event.LogID
 		}
 		checkpoint.LastSeenAt = observedAt.UnixNano()
 		checkpoint.LastFetchedAt = observedAt.UnixNano()
 		checkpoint.ListMarker = marker
 		checkpoint.AbsentSince = 0
-		if checkpoint.PendingHash == event.ContentHash ||
-			(checkpoint.PendingHash == "" && checkpoint.DeliveredHash == event.ContentHash) {
+		if checkpoint.PendingHash == event.ContentHash || (checkpoint.PendingHash == "" && checkpoint.DeliveredHash == event.ContentHash) {
 			return putCheckpoint(checkpoints, checkpoint)
 		}
 		count := int(readUint64(meta.Get(keyEventCount)))
 		bytesUsed := int64(readUint64(meta.Get(keyEventBytes)))
-		record := Record{
-			AlertID: event.Event.AlertID, RecordKey: append([]byte(nil), event.RecordKey...),
-			Payload: append([]byte(nil), event.Payload...), ContentHash: event.ContentHash,
-			CreatedAt: observedAt.UnixNano(),
-		}
 		sequence, err := outbox.NextSequence()
 		if err != nil {
 			return err
 		}
-		record.Sequence = sequence
+		record := Record{
+			Sequence: sequence, LogID: event.Event.LogID,
+			RecordKey: append([]byte(nil), event.RecordKey...), Payload: append([]byte(nil), event.Payload...),
+			ContentHash: event.ContentHash, CreatedAt: observedAt.UnixNano(),
+		}
 		encoded, err := json.Marshal(record)
 		if err != nil {
 			return err
 		}
 		encodedSize := int64(len(encoded))
-		if count >= s.maxEvents || bytesUsed+encodedSize > s.maxBytes {
+		if count >= s.maxEvents || encodedSize > s.maxBytes-bytesUsed {
 			return FullError{}
 		}
 		if err := outbox.Put(uint64Key(sequence), encoded); err != nil {
@@ -197,18 +197,18 @@ func (s *Store) Enqueue(event alerts.EncodedEvent, marker string, observedAt tim
 	return inserted, err
 }
 
-func (s *Store) MarkSeen(alertID, marker string, observedAt time.Time) error {
+func (s *Store) MarkSeen(logID, marker string, observedAt time.Time) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(bucketCheckpoints)
-		checkpoint, err := readCheckpoint(bucket.Get([]byte(alertID)))
+		checkpoint, err := readCheckpoint(bucket.Get([]byte(logID)))
 		if err != nil {
 			return err
 		}
-		if checkpoint.AlertID == "" {
+		if checkpoint.LogID == "" {
 			if bucket.Stats().KeyN >= s.maxCheckpoints {
 				return FullError{}
 			}
-			checkpoint.AlertID = alertID
+			checkpoint.LogID = logID
 		}
 		checkpoint.ListMarker = marker
 		checkpoint.LastSeenAt = observedAt.UnixNano()
@@ -217,36 +217,38 @@ func (s *Store) MarkSeen(alertID, marker string, observedAt time.Time) error {
 	})
 }
 
-func (s *Store) Checkpoint(alertID string) (Checkpoint, bool, error) {
+func (s *Store) Checkpoint(logID string) (Checkpoint, bool, error) {
 	var result Checkpoint
 	err := s.db.View(func(tx *bolt.Tx) error {
 		var err error
-		result, err = readCheckpoint(tx.Bucket(bucketCheckpoints).Get([]byte(alertID)))
+		result, err = readCheckpoint(tx.Bucket(bucketCheckpoints).Get([]byte(logID)))
 		return err
 	})
-	return result, result.AlertID != "", err
+	return result, result.LogID != "", err
 }
 
-func (s *Store) FetchState(alertID string) (bool, string, time.Time, error) {
-	checkpoint, exists, err := s.Checkpoint(alertID)
+func (s *Store) FetchState(logID string) (bool, string, time.Time, error) {
+	checkpoint, exists, err := s.Checkpoint(logID)
 	if err != nil || !exists {
 		return exists, "", time.Time{}, err
 	}
-	var lastFetched time.Time
-	if checkpoint.LastFetchedAt != 0 {
-		lastFetched = time.Unix(0, checkpoint.LastFetchedAt)
+	if checkpoint.LastFetchedAt == 0 {
+		return true, checkpoint.ListMarker, time.Time{}, nil
 	}
-	return true, checkpoint.ListMarker, lastFetched, nil
+	return true, checkpoint.ListMarker, time.Unix(0, checkpoint.LastFetchedAt), nil
 }
 
 func (s *Store) Records(limit int) ([]Record, error) {
+	if limit < 1 {
+		return nil, errors.New("record limit must be positive")
+	}
 	result := make([]Record, 0, limit)
 	err := s.db.View(func(tx *bolt.Tx) error {
 		cursor := tx.Bucket(bucketOutbox).Cursor()
 		for key, value := cursor.First(); key != nil && len(result) < limit; key, value = cursor.Next() {
 			var record Record
 			if err := json.Unmarshal(value, &record); err != nil {
-				return err
+				return CorruptionError{reason: "invalid outbox record"}
 			}
 			result = append(result, record)
 		}
@@ -264,42 +266,41 @@ func (s *Store) Acknowledge(sequence uint64) error {
 		}
 		var record Record
 		if err := json.Unmarshal(value, &record); err != nil {
-			return err
+			return CorruptionError{reason: "invalid outbox record"}
 		}
 		canonical, err := json.Marshal(record)
-		if err != nil || !bytes.Equal(canonical, value) || record.Sequence != sequence {
+		if err != nil || !bytes.Equal(canonical, value) || record.Sequence != sequence || validateStoredRecord(record) != nil {
 			return CorruptionError{reason: "invalid outbox record"}
 		}
-		if err := validateStoredRecord(record); err != nil {
-			return CorruptionError{reason: "invalid outbox record"}
-		}
-		checkpointBucket := tx.Bucket(bucketCheckpoints)
-		checkpoint, err := readCheckpoint(checkpointBucket.Get([]byte(record.AlertID)))
+		checkpoints := tx.Bucket(bucketCheckpoints)
+		checkpoint, err := readCheckpoint(checkpoints.Get([]byte(record.LogID)))
 		if err != nil {
 			return err
 		}
-		if checkpoint.AlertID == "" || checkpoint.AlertID != record.AlertID {
+		if checkpoint.LogID == "" || checkpoint.LogID != record.LogID {
 			return CorruptionError{reason: "outbox record has no matching checkpoint"}
 		}
 		newestPending := ""
+		var newestSequence uint64
 		cursor := outbox.Cursor()
 		for _, candidate := cursor.First(); candidate != nil; _, candidate = cursor.Next() {
 			var queued Record
 			if err := json.Unmarshal(candidate, &queued); err != nil {
 				return CorruptionError{reason: "invalid outbox record"}
 			}
-			if queued.AlertID == record.AlertID {
+			if queued.LogID == record.LogID {
 				newestPending = queued.ContentHash
+				newestSequence = queued.Sequence
 			}
 		}
 		if checkpoint.PendingHash != newestPending {
 			return CorruptionError{reason: "checkpoint pending hash mismatch"}
 		}
 		checkpoint.DeliveredHash = record.ContentHash
-		if checkpoint.PendingHash == record.ContentHash {
+		if newestSequence == record.Sequence {
 			checkpoint.PendingHash = ""
 		}
-		if err := putCheckpoint(checkpointBucket, checkpoint); err != nil {
+		if err := putCheckpoint(checkpoints, checkpoint); err != nil {
 			return err
 		}
 		meta := tx.Bucket(bucketMeta)
@@ -313,10 +314,9 @@ func (s *Store) Acknowledge(sequence uint64) error {
 			count--
 		}
 		if encodedSize > bytesUsed {
-			bytesUsed = 0
-		} else {
-			bytesUsed -= encodedSize
+			return CorruptionError{reason: "derived byte count underflow"}
 		}
+		bytesUsed -= encodedSize
 		if err := meta.Put(keyEventCount, uint64Value(count)); err != nil {
 			return err
 		}
@@ -328,9 +328,14 @@ func (s *Store) Stats() (Stats, error) {
 	var result Stats
 	err := s.db.View(func(tx *bolt.Tx) error {
 		meta := tx.Bucket(bucketMeta)
+		checkpoints := tx.Bucket(bucketCheckpoints)
+		if meta == nil || checkpoints == nil {
+			return CorruptionError{reason: "required bucket is missing"}
+		}
 		result.Events = int(readUint64(meta.Get(keyEventCount)))
 		result.Bytes = int64(readUint64(meta.Get(keyEventBytes)))
-		result.Full = result.Events >= s.maxEvents || result.Bytes >= s.maxBytes
+		result.Checkpoints = checkpoints.Stats().KeyN
+		result.Full = result.Events >= s.maxEvents || result.Bytes >= s.maxBytes || result.Checkpoints >= s.maxCheckpoints
 		return nil
 	})
 	return result, err
@@ -355,7 +360,7 @@ func (s *Store) ReconcileListed(listed map[string]struct{}, now time.Time, compl
 			if err != nil {
 				return err
 			}
-			if _, ok := listed[checkpoint.AlertID]; ok {
+			if _, exists := listed[checkpoint.LogID]; exists {
 				continue
 			}
 			if checkpoint.AbsentSince == 0 {
@@ -373,13 +378,7 @@ func (s *Store) ReconcileListed(listed map[string]struct{}, now time.Time, compl
 				return err
 			}
 		}
-		count := bucket.Stats().KeyN
-		if count <= s.maxCheckpoints {
-			return nil
-		}
-		if count > s.maxCheckpoints {
-			full = true
-		}
+		full = bucket.Stats().KeyN >= s.maxCheckpoints
 		return nil
 	})
 	if err != nil {
@@ -387,6 +386,134 @@ func (s *Store) ReconcileListed(listed map[string]struct{}, now time.Time, compl
 	}
 	if full {
 		return FullError{}
+	}
+	return nil
+}
+
+func validateAndMigrate(tx *bolt.Tx) error {
+	meta := tx.Bucket(bucketMeta)
+	outbox := tx.Bucket(bucketOutbox)
+	checkpoints := tx.Bucket(bucketCheckpoints)
+	if meta == nil || outbox == nil || checkpoints == nil {
+		return CorruptionError{reason: "required bucket is missing"}
+	}
+	version := meta.Get(keySchemaVersion)
+	if version != nil && !bytes.Equal(version, currentSchema) {
+		return CorruptionError{reason: "unsupported schema version"}
+	}
+	count, bytesUsed, newestPending, recordsByLog, err := validateRecords(outbox)
+	if err != nil {
+		return err
+	}
+	if err := validateCheckpoints(checkpoints, newestPending, recordsByLog); err != nil {
+		return err
+	}
+	if err := meta.Put(keyEventCount, uint64Value(count)); err != nil {
+		return err
+	}
+	if err := meta.Put(keyEventBytes, uint64Value(bytesUsed)); err != nil {
+		return err
+	}
+	return meta.Put(keySchemaVersion, currentSchema)
+}
+
+func validateRecords(bucket *bolt.Bucket) (uint64, uint64, map[string]string, map[string]bool, error) {
+	var count, bytesUsed uint64
+	newestPending := make(map[string]string)
+	recordsByLog := make(map[string]bool)
+	cursor := bucket.Cursor()
+	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+		if len(key) != 8 {
+			return 0, 0, nil, nil, CorruptionError{reason: "invalid outbox key"}
+		}
+		sequence := binary.BigEndian.Uint64(key)
+		if sequence == 0 {
+			return 0, 0, nil, nil, CorruptionError{reason: "invalid outbox sequence"}
+		}
+		var record Record
+		if err := json.Unmarshal(value, &record); err != nil {
+			return 0, 0, nil, nil, CorruptionError{reason: "invalid outbox record"}
+		}
+		canonical, err := json.Marshal(record)
+		if err != nil || !bytes.Equal(canonical, value) || record.Sequence != sequence || validateStoredRecord(record) != nil {
+			return 0, 0, nil, nil, CorruptionError{reason: "outbox record invariant failed"}
+		}
+		count++
+		if uint64(len(value)) > ^uint64(0)-bytesUsed {
+			return 0, 0, nil, nil, CorruptionError{reason: "outbox byte count overflow"}
+		}
+		bytesUsed += uint64(len(value))
+		newestPending[record.LogID] = record.ContentHash
+		recordsByLog[record.LogID] = true
+	}
+	return count, bytesUsed, newestPending, recordsByLog, nil
+}
+
+func validateStoredRecord(record Record) error {
+	if record.Sequence == 0 || record.CreatedAt <= 0 || ddae.ValidateServiceabilityLogID(record.LogID) != nil || !validHash(record.ContentHash) {
+		return errors.New("invalid record identity")
+	}
+	if len(record.RecordKey) != 64 || !validHash(string(record.RecordKey)) {
+		return errors.New("invalid record key")
+	}
+	event, err := serviceability.DecodeStoredEvent(record.Payload)
+	if err != nil {
+		return err
+	}
+	if event.LogID != record.LogID || event.ContentHashSHA256 != record.ContentHash {
+		return errors.New("payload identity mismatch")
+	}
+	canonical, err := json.Marshal(event.Log)
+	if err != nil {
+		return err
+	}
+	hash := sha256.Sum256(canonical)
+	if hex.EncodeToString(hash[:]) != record.ContentHash {
+		return errors.New("payload content hash mismatch")
+	}
+	keyHash := sha256.New()
+	_, _ = keyHash.Write([]byte(event.SourceInstance))
+	_, _ = keyHash.Write([]byte{0})
+	_, _ = keyHash.Write([]byte(serviceability.RecordKind))
+	_, _ = keyHash.Write([]byte{0})
+	_, _ = keyHash.Write([]byte(event.LogID))
+	if !bytes.Equal(record.RecordKey, []byte(hex.EncodeToString(keyHash.Sum(nil)))) {
+		return errors.New("record key mismatch")
+	}
+	return nil
+}
+
+func validateCheckpoints(bucket *bolt.Bucket, newestPending map[string]string, recordsByLog map[string]bool) error {
+	cursor := bucket.Cursor()
+	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+		checkpoint, err := readCheckpoint(value)
+		if err != nil {
+			return CorruptionError{reason: "invalid checkpoint"}
+		}
+		if checkpoint.LogID == "" || string(key) != checkpoint.LogID || ddae.ValidateServiceabilityLogID(checkpoint.LogID) != nil {
+			return CorruptionError{reason: "checkpoint identity mismatch"}
+		}
+		canonical, err := json.Marshal(checkpoint)
+		if err != nil || !bytes.Equal(canonical, value) {
+			return CorruptionError{reason: "non-canonical checkpoint"}
+		}
+		for _, hash := range []string{checkpoint.PendingHash, checkpoint.DeliveredHash} {
+			if hash != "" && !validHash(hash) {
+				return CorruptionError{reason: "invalid checkpoint hash"}
+			}
+		}
+		for _, timestamp := range []int64{checkpoint.LastFetchedAt, checkpoint.LastSeenAt, checkpoint.AbsentSince} {
+			if timestamp < 0 {
+				return CorruptionError{reason: "invalid checkpoint timestamp"}
+			}
+		}
+		if checkpoint.PendingHash != newestPending[checkpoint.LogID] {
+			return CorruptionError{reason: "checkpoint pending hash mismatch"}
+		}
+		delete(recordsByLog, checkpoint.LogID)
+	}
+	if len(recordsByLog) != 0 {
+		return CorruptionError{reason: "outbox record has no checkpoint"}
 	}
 	return nil
 }
@@ -407,7 +534,7 @@ func putCheckpoint(bucket *bolt.Bucket, checkpoint Checkpoint) error {
 	if err != nil {
 		return err
 	}
-	return bucket.Put([]byte(checkpoint.AlertID), encoded)
+	return bucket.Put([]byte(checkpoint.LogID), encoded)
 }
 
 func uint64Key(value uint64) []byte { return uint64Value(value) }
@@ -423,165 +550,14 @@ func readUint64(value []byte) uint64 {
 	return binary.BigEndian.Uint64(value)
 }
 
-func validateAndMigrate(tx *bolt.Tx) error {
-	meta := tx.Bucket(bucketMeta)
-	outbox := tx.Bucket(bucketOutbox)
-	checkpoints := tx.Bucket(bucketCheckpoints)
-	if meta == nil || outbox == nil || checkpoints == nil {
-		return CorruptionError{reason: "required bucket is missing"}
-	}
-	version := meta.Get(keySchemaVersion)
-	if version != nil && !bytes.Equal(version, currentSchema) {
-		return CorruptionError{reason: "unsupported schema version"}
-	}
-
-	count, bytesUsed, newestPending, recordsByAlert, err := validateRecords(outbox)
-	if err != nil {
-		return err
-	}
-	if err := validateCheckpoints(checkpoints, newestPending, recordsByAlert); err != nil {
-		return err
-	}
-	if err := meta.Put(keyEventCount, uint64Value(count)); err != nil {
-		return err
-	}
-	if err := meta.Put(keyEventBytes, uint64Value(bytesUsed)); err != nil {
-		return err
-	}
-	return meta.Put(keySchemaVersion, currentSchema)
-}
-
-func validateRecords(bucket *bolt.Bucket) (uint64, uint64, map[string]string, map[string]bool, error) {
-	var count uint64
-	var bytesUsed uint64
-	newestPending := make(map[string]string)
-	recordsByAlert := make(map[string]bool)
-	cursor := bucket.Cursor()
-	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-		if len(key) != 8 {
-			return 0, 0, nil, nil, CorruptionError{reason: "invalid outbox key"}
-		}
-		sequence := binary.BigEndian.Uint64(key)
-		if sequence == 0 {
-			return 0, 0, nil, nil, CorruptionError{reason: "invalid outbox sequence"}
-		}
-		var record Record
-		if err := json.Unmarshal(value, &record); err != nil {
-			return 0, 0, nil, nil, CorruptionError{reason: "invalid outbox record"}
-		}
-		canonical, err := json.Marshal(record)
-		if err != nil || !bytes.Equal(canonical, value) {
-			return 0, 0, nil, nil, CorruptionError{reason: "non-canonical outbox record"}
-		}
-		if record.Sequence != sequence || validateStoredRecord(record) != nil {
-			return 0, 0, nil, nil, CorruptionError{reason: "outbox record invariant failed"}
-		}
-		count++
-		if uint64(len(value)) > ^uint64(0)-bytesUsed {
-			return 0, 0, nil, nil, CorruptionError{reason: "outbox byte count overflow"}
-		}
-		bytesUsed += uint64(len(value))
-		newestPending[record.AlertID] = record.ContentHash
-		recordsByAlert[record.AlertID] = true
-	}
-	return count, bytesUsed, newestPending, recordsByAlert, nil
-}
-
-func validateStoredRecord(record Record) error {
-	if record.Sequence == 0 || record.CreatedAt <= 0 || ddaeAlertIDInvalid(record.AlertID) || !validHash(record.ContentHash) {
-		return errors.New("invalid record identity")
-	}
-	if len(record.Payload) == 0 || len(record.Payload) > alerts.MaxEventBytes || len(record.RecordKey) != 64 || !validHash(string(record.RecordKey)) {
-		return errors.New("invalid record payload")
-	}
-	var event alerts.Event
-	if err := json.Unmarshal(record.Payload, &event); err != nil {
-		return err
-	}
-	canonicalEvent, err := json.Marshal(event)
-	if err != nil || !bytes.Equal(canonicalEvent, record.Payload) {
-		return errors.New("non-canonical event payload")
-	}
-	if err := alerts.ValidateStoredEvent(event); err != nil {
-		return err
-	}
-	if event.SchemaVersion != alerts.SchemaVersion || event.EventType != alerts.EventType || event.SourceSystem != alerts.SourceSystem ||
-		event.AlertID != record.AlertID || event.ContentHashSHA256 != record.ContentHash {
-		return errors.New("payload identity mismatch")
-	}
-	canonical, err := json.Marshal(event.Alert)
-	if err != nil {
-		return err
-	}
-	contentHash := sha256.Sum256(canonical)
-	if hex.EncodeToString(contentHash[:]) != record.ContentHash {
-		return errors.New("payload content hash mismatch")
-	}
-	keyHash := sha256.New()
-	_, _ = keyHash.Write([]byte(event.SourceInstance))
-	_, _ = keyHash.Write([]byte{0})
-	_, _ = keyHash.Write([]byte(event.AlertID))
-	if !bytes.Equal(record.RecordKey, []byte(hex.EncodeToString(keyHash.Sum(nil)))) {
-		return errors.New("record key mismatch")
-	}
-	return nil
-}
-
-func validateCheckpoints(bucket *bolt.Bucket, newestPending map[string]string, recordsByAlert map[string]bool) error {
-	cursor := bucket.Cursor()
-	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-		checkpoint, err := readCheckpoint(value)
-		if err != nil {
-			return CorruptionError{reason: "invalid checkpoint"}
-		}
-		if checkpoint.AlertID == "" || string(key) != checkpoint.AlertID || ddaeAlertIDInvalid(checkpoint.AlertID) {
-			return CorruptionError{reason: "checkpoint identity mismatch"}
-		}
-		canonical, err := json.Marshal(checkpoint)
-		if err != nil || !bytes.Equal(canonical, value) {
-			return CorruptionError{reason: "non-canonical checkpoint"}
-		}
-		for _, hash := range []string{checkpoint.PendingHash, checkpoint.DeliveredHash} {
-			if hash != "" && !validHash(hash) {
-				return CorruptionError{reason: "invalid checkpoint hash"}
-			}
-		}
-		for _, timestamp := range []int64{checkpoint.LastFetchedAt, checkpoint.LastSeenAt, checkpoint.AbsentSince} {
-			if timestamp < 0 {
-				return CorruptionError{reason: "invalid checkpoint timestamp"}
-			}
-		}
-		if checkpoint.PendingHash != newestPending[checkpoint.AlertID] {
-			return CorruptionError{reason: "checkpoint pending hash mismatch"}
-		}
-		delete(recordsByAlert, checkpoint.AlertID)
-	}
-	if len(recordsByAlert) != 0 {
-		return CorruptionError{reason: "outbox record has no checkpoint"}
-	}
-	return nil
-}
-
 func validHash(value string) bool {
 	if len(value) != 64 {
 		return false
 	}
-	for _, ch := range value {
-		if !(ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f') {
+	for _, char := range value {
+		if !(char >= '0' && char <= '9' || char >= 'a' && char <= 'f') {
 			return false
 		}
 	}
 	return true
-}
-
-func ddaeAlertIDInvalid(id string) bool {
-	if len(id) < 1 || len(id) > 256 || id == "." || id == ".." {
-		return true
-	}
-	for _, ch := range id {
-		if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '.' || ch == '_' || ch == ':' || ch == '-') {
-			return true
-		}
-	}
-	return false
 }

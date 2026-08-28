@@ -1,8 +1,9 @@
-package alerts
+package serviceability
 
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,21 +12,32 @@ import (
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/snapshot"
 )
 
-type AlertAPI interface {
-	AlertList(context.Context) (ddae.AlertList, error)
-	AlertDetail(context.Context, string) (ddae.AlertDetail, error)
+type API interface {
+	ServiceabilityLogList(context.Context) (ddae.ServiceabilityLogList, error)
+	ServiceabilityLogDetail(context.Context, string) (ddae.ServiceabilityLogDetail, error)
 }
 
 type State interface {
-	FetchState(alertID string) (exists bool, marker string, lastFetched time.Time, err error)
+	FetchState(logID string) (exists bool, marker string, lastFetched time.Time, err error)
 	Enqueue(event EncodedEvent, marker string, observedAt time.Time) (bool, error)
-	MarkSeen(alertID, marker string, observedAt time.Time) error
+	MarkSeen(logID, marker string, observedAt time.Time) error
 	ReconcileListed(listed map[string]struct{}, now time.Time, complete bool) error
 	Health() (events int, full bool, err error)
 }
 
+type Logger interface{ Error(string, ...any) }
+
+type Options struct {
+	SourceInstance  string
+	Interval        time.Duration
+	CycleTimeout    time.Duration
+	RefreshInterval time.Duration
+	MaxPerCycle     int
+	Concurrency     int
+}
+
 type Pipeline struct {
-	api             AlertAPI
+	api             API
 	state           State
 	diagnostics     *snapshot.Store
 	sourceInstance  string
@@ -38,26 +50,19 @@ type Pipeline struct {
 	logger          Logger
 }
 
-type Logger interface {
-	Error(msg string, args ...any)
+type detailTask struct {
+	id          string
+	marker      string
+	priority    int
+	lastFetched time.Time
 }
 
-type Options struct {
-	SourceInstance  string
-	Interval        time.Duration
-	CycleTimeout    time.Duration
-	RefreshInterval time.Duration
-	MaxPerCycle     int
-	Concurrency     int
-}
-
-func NewPipeline(api AlertAPI, state State, diagnostics *snapshot.Store, options Options, logger Logger) *Pipeline {
+func NewPipeline(api API, state State, diagnostics *snapshot.Store, options Options, logger Logger) *Pipeline {
 	return &Pipeline{
 		api: api, state: state, diagnostics: diagnostics,
 		sourceInstance: options.SourceInstance, interval: options.Interval,
 		cycleTimeout: options.CycleTimeout, refreshInterval: options.RefreshInterval,
-		maxPerCycle: options.MaxPerCycle, concurrency: options.Concurrency,
-		logger: logger,
+		maxPerCycle: options.MaxPerCycle, concurrency: options.Concurrency, logger: logger,
 	}
 }
 
@@ -79,27 +84,26 @@ func (p *Pipeline) poll(parent context.Context) {
 	ctx, cancel := context.WithTimeout(parent, p.cycleTimeout)
 	defer cancel()
 	started := time.Now()
-	list, err := p.api.AlertList(ctx)
+	list, err := p.api.ServiceabilityLogList(ctx)
 	listDuration := time.Since(started)
 	if err != nil {
-		p.diagnostics.RecordAlertList(false, false, listDuration)
-		p.diagnostics.RecordAlertDetail(false, 0, 0)
-		p.diagnostics.SetAlertCollectionReady(false)
-		p.logFailure("alert list collection failed", "alert_list", err)
+		p.diagnostics.RecordServiceabilityLogList(false, false, listDuration)
+		p.diagnostics.RecordServiceabilityLogDetail(false, 0, 0)
+		p.diagnostics.SetServiceabilityLogCollectionReady(false)
+		p.logFailure("serviceability log list collection failed", "serviceability_log_list", err)
 		return
 	}
 
 	now := time.Now()
 	listed := make(map[string]struct{}, len(list.Results))
 	markers := make(map[string]string, len(list.Results))
-	complete := list.TotalRecords != nil && *list.TotalRecords >= 0
+	complete := !list.Malformed && list.TotalRecords != nil && *list.TotalRecords >= 0
 	for _, item := range list.Results {
-		if err := ddae.ValidateAlertID(item.ID); err != nil {
+		if err := ddae.ValidateServiceabilityLogID(item.ID); err != nil {
 			complete = false
 			continue
 		}
 		if _, duplicate := listed[item.ID]; duplicate {
-			complete = false
 			continue
 		}
 		listed[item.ID] = struct{}{}
@@ -108,7 +112,7 @@ func (p *Pipeline) poll(parent context.Context) {
 	if list.TotalRecords != nil && *list.TotalRecords > int64(len(listed)) {
 		complete = false
 	}
-	p.diagnostics.RecordAlertList(true, complete, listDuration)
+	p.diagnostics.RecordServiceabilityLogList(true, complete, listDuration)
 
 	tasks := make([]detailTask, 0, len(listed))
 	stateOK := true
@@ -116,8 +120,8 @@ func (p *Pipeline) poll(parent context.Context) {
 		exists, previousMarker, lastFetched, stateErr := p.state.FetchState(id)
 		if stateErr != nil {
 			stateOK = false
-			p.diagnostics.SetAlertPipelineStateHealthy(false)
-			p.logFailure("alert checkpoint read failed", "alert_detail", stateErr)
+			p.diagnostics.SetServiceabilityLogPipelineStateHealthy(false)
+			p.logFailure("serviceability log checkpoint read failed", "serviceability_log_detail", stateErr)
 			continue
 		}
 		marker := markers[id]
@@ -136,8 +140,8 @@ func (p *Pipeline) poll(parent context.Context) {
 		}
 		if err := p.state.MarkSeen(id, marker, now); err != nil {
 			stateOK = false
-			p.diagnostics.SetAlertPipelineStateHealthy(false)
-			p.logFailure("alert checkpoint update failed", "alert_detail", err)
+			p.diagnostics.SetServiceabilityLogPipelineStateHealthy(false)
+			p.logFailure("serviceability log checkpoint update failed", "serviceability_log_detail", err)
 		}
 	}
 	eligible := len(tasks)
@@ -148,26 +152,26 @@ func (p *Pipeline) poll(parent context.Context) {
 	detailSuccess, detailStateOK := p.fetchDetails(ctx, tasks, now)
 	if !detailStateOK {
 		stateOK = false
-		p.diagnostics.SetAlertPipelineStateHealthy(false)
+		p.diagnostics.SetServiceabilityLogPipelineStateHealthy(false)
 	}
 	detailDuration := time.Since(detailStarted)
 	if err := p.state.ReconcileListed(listed, now, complete); err != nil {
 		stateOK = false
-		p.diagnostics.SetAlertPipelineStateHealthy(false)
-		p.logFailure("alert checkpoint reconciliation failed", "alert_detail", err)
+		p.diagnostics.SetServiceabilityLogPipelineStateHealthy(false)
+		p.logFailure("serviceability log reconciliation failed", "serviceability_log_detail", err)
 	}
 	events, full, healthErr := p.state.Health()
 	if healthErr != nil {
 		stateOK = false
-		p.diagnostics.SetAlertPipelineStateHealthy(false)
-		p.logFailure("alert persistent state health failed", "alert_detail", healthErr)
+		p.diagnostics.SetServiceabilityLogPipelineStateHealthy(false)
+		p.logFailure("serviceability log state health failed", "serviceability_log_detail", healthErr)
 	}
-	p.diagnostics.SetKafkaBuffered(events)
-	p.diagnostics.SetAlertStateFull(full)
-	p.diagnostics.RecordAlertDetail(detailSuccess && stateOK, detailDuration, deferred)
-	p.diagnostics.SetAlertCollectionReady(complete && detailSuccess)
+	p.diagnostics.SetServiceabilityLogBuffered(events)
+	p.diagnostics.SetServiceabilityLogStateFull(full)
+	p.diagnostics.RecordServiceabilityLogDetail(detailSuccess && stateOK, detailDuration, deferred)
+	p.diagnostics.SetServiceabilityLogCollectionReady(complete && detailSuccess)
 	if stateOK && detailSuccess {
-		p.diagnostics.SetAlertPipelineStateHealthy(true)
+		p.diagnostics.SetServiceabilityLogPipelineStateHealthy(true)
 	}
 }
 
@@ -232,18 +236,18 @@ func (p *Pipeline) fetchDetails(ctx context.Context, tasks []detailTask, observe
 	}
 	workers := min(p.concurrency, len(tasks))
 	work := make(chan detailTask)
-	type detailResult struct {
+	type result struct {
 		err      error
 		stateErr bool
 	}
-	results := make(chan detailResult, len(tasks))
+	results := make(chan result, len(tasks))
 	var group sync.WaitGroup
 	group.Add(workers)
 	for range workers {
 		go func() {
 			defer group.Done()
 			for task := range work {
-				detail, err := p.api.AlertDetail(ctx, task.id)
+				detail, err := p.api.ServiceabilityLogDetail(ctx, task.id)
 				stateErr := false
 				if err == nil {
 					var event EncodedEvent
@@ -253,7 +257,7 @@ func (p *Pipeline) fetchDetails(ctx context.Context, tasks []detailTask, observe
 						stateErr = err != nil
 					}
 				}
-				results <- detailResult{err: err, stateErr: stateErr}
+				results <- result{err: err, stateErr: stateErr}
 			}
 		}()
 	}
@@ -269,18 +273,29 @@ func (p *Pipeline) fetchDetails(ctx context.Context, tasks []detailTask, observe
 	}()
 	group.Wait()
 	close(results)
-	success := len(tasks) > 0
+	success := true
 	stateOK := true
 	count := 0
-	for result := range results {
+	for current := range results {
 		count++
-		if result.err != nil {
+		if current.err != nil {
 			success = false
-			p.logFailure("alert detail processing failed", "alert_detail", result.err)
+			p.logFailure("serviceability log detail processing failed", "serviceability_log_detail", current.err)
 		}
-		stateOK = stateOK && !result.stateErr
+		stateOK = stateOK && !current.stateErr
 	}
 	return success && count == len(tasks), stateOK
+}
+
+func usableMarker(value *string) string {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return ""
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, *value)
+	if err != nil {
+		return ""
+	}
+	return parsed.UTC().Format(time.RFC3339Nano)
 }
 
 func (p *Pipeline) logFailure(message, component string, err error) {

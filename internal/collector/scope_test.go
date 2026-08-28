@@ -15,6 +15,7 @@ func TestCompiledCollectionScopeIsExactAndImmutable(t *testing.T) {
 	wantOperations := map[string]bool{
 		"ping": true, "clusters": true, "nodes": true, "lock": true,
 		"power": true, "alert_list": true, "alert_detail": true,
+		"serviceability_log_list": true, "serviceability_log_detail": true,
 	}
 	operations := ddae.ApprovedOperations()
 	if len(operations) != len(wantOperations) {

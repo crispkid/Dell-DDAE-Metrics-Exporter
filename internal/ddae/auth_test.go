@@ -124,6 +124,10 @@ func TestTokenFlowAndAllApprovedGETOperations(t *testing.T) {
 			fmt.Fprint(w, `{"results":[{"id":"alert-1"}],"totalRecords":1}`)
 		case alertDetailPath + "alert-1":
 			fmt.Fprint(w, `{"id":"alert-1","type":"warning"}`)
+		case serviceabilityLogListPath:
+			fmt.Fprint(w, `{"results":[{"id":"log-1"}],"totalRecords":1}`)
+		case serviceabilityLogDetailPath + "log-1":
+			fmt.Fprint(w, `{"id":"log-1","type":"info"}`)
 		default:
 			http.NotFound(w, r)
 		}
@@ -157,6 +161,12 @@ func TestTokenFlowAndAllApprovedGETOperations(t *testing.T) {
 	if detail, err := client.AlertDetail(ctx, "alert-1"); err != nil || detail.ID != "alert-1" {
 		t.Fatalf("detail=%#v err=%v", detail, err)
 	}
+	if _, err := client.ServiceabilityLogList(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if detail, err := client.ServiceabilityLogDetail(ctx, "log-1"); err != nil || detail.ID != "log-1" {
+		t.Fatalf("serviceability detail=%#v err=%v", detail, err)
+	}
 	if tokenCalls.Load() != 1 {
 		t.Fatalf("token calls = %d", tokenCalls.Load())
 	}
@@ -164,6 +174,9 @@ func TestTokenFlowAndAllApprovedGETOperations(t *testing.T) {
 		path := operation.Path
 		if operation.Collector == "alert_detail" {
 			path = alertDetailPath + "alert-1"
+		}
+		if operation.Collector == "serviceability_log_detail" {
+			path = serviceabilityLogDetailPath + "log-1"
 		}
 		if operation.Method != http.MethodGet || seen[path] != 1 {
 			t.Errorf("operation %#v seen=%d", operation, seen[path])

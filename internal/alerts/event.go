@@ -66,6 +66,109 @@ type ValidationError struct{ field string }
 func (e ValidationError) Error() string                     { return e.field + " validation failed" }
 func (e ValidationError) FailureClass() observability.Class { return observability.ClassValidation }
 
+func ValidateStoredEvent(event Event) error {
+	if event.SchemaVersion != SchemaVersion || event.EventType != EventType || event.SourceSystem != SourceSystem {
+		return ValidationError{field: "event_identity"}
+	}
+	if err := validateSourceInstance(event.SourceInstance); err != nil {
+		return err
+	}
+	if err := ddae.ValidateAlertID(event.AlertID); err != nil {
+		return err
+	}
+	if !validLowerHexHash(event.ContentHashSHA256) {
+		return ValidationError{field: "content_hash_sha256"}
+	}
+	observedAt, err := time.Parse(time.RFC3339Nano, event.ObservedAt)
+	if err != nil || observedAt.UTC().Format(time.RFC3339Nano) != event.ObservedAt {
+		return ValidationError{field: "observed_at"}
+	}
+	if err := validateStoredAlert(event.Alert); err != nil {
+		return err
+	}
+	canonical, err := json.Marshal(event.Alert)
+	if err != nil {
+		return ValidationError{field: "alert"}
+	}
+	hash := sha256.Sum256(canonical)
+	if hex.EncodeToString(hash[:]) != event.ContentHashSHA256 {
+		return ValidationError{field: "content_hash_sha256"}
+	}
+	return nil
+}
+
+func validateStoredAlert(alert Alert) error {
+	switch alert.Severity {
+	case "critical", "error", "warning", "info", "normal", "unknown":
+	default:
+		return ValidationError{field: "severity"}
+	}
+	if alert.OccurrenceCount != nil && *alert.OccurrenceCount < 0 {
+		return ValidationError{field: "occurrence_count"}
+	}
+	if alert.AutoClearTimeoutRaw != nil && *alert.AutoClearTimeoutRaw < 0 {
+		return ValidationError{field: "auto_clear_timeout_raw"}
+	}
+	for _, timestamp := range []struct {
+		value *string
+		field string
+	}{{alert.CreatedAt, "created_at"}, {alert.UpdatedAt, "updated_at"}} {
+		if timestamp.value == nil {
+			continue
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, *timestamp.value)
+		if err != nil || parsed.UTC().Format(time.RFC3339Nano) != *timestamp.value {
+			return ValidationError{field: timestamp.field}
+		}
+	}
+	for _, field := range []struct {
+		value *string
+		limit int
+		name  string
+	}{
+		{alert.ClearType, 64, "clear_type"}, {alert.AppName, 256, "app_name"},
+		{alert.Component, 256, "component"}, {alert.Namespace, 256, "namespace"},
+		{alert.Message, 8192, "message"}, {alert.Reason, 4096, "reason"},
+		{alert.ResourceID, 512, "resource_id"}, {alert.SymptomID, 256, "symptom_id"},
+		{alert.Related, 512, "related"},
+	} {
+		if field.value != nil {
+			if err := validString(*field.value, field.limit); err != nil {
+				return ValidationError{field: field.name}
+			}
+		}
+	}
+	if len(alert.Remedies) > 32 {
+		return ValidationError{field: "remedies"}
+	}
+	for _, remedy := range alert.Remedies {
+		if err := validString(remedy, 2048); err != nil {
+			return ValidationError{field: "remedies"}
+		}
+	}
+	if len(alert.RelatedEvents) > 100 {
+		return ValidationError{field: "related_events"}
+	}
+	for _, related := range alert.RelatedEvents {
+		if err := validateStoredAlert(Alert(related)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validLowerHexHash(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	for _, ch := range value {
+		if !(ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 func BuildEvent(sourceInstance, requestedID string, detail ddae.AlertDetail, observedAt time.Time) (EncodedEvent, error) {
 	if err := validateSourceInstance(sourceInstance); err != nil {
 		return EncodedEvent{}, err

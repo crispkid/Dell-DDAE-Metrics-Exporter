@@ -14,50 +14,60 @@ type BuildInfo struct {
 }
 
 type Collector struct {
-	store            *snapshot.Store
-	staleAfter       time.Duration
-	build            BuildInfo
-	resourcesEnabled bool
-	alertsEnabled    bool
+	store                     *snapshot.Store
+	staleAfter                time.Duration
+	build                     BuildInfo
+	resourcesEnabled          bool
+	alertsEnabled             bool
+	serviceabilityLogsEnabled bool
 
-	monitoringEnabled        *prometheus.Desc
-	up                       *prometheus.Desc
-	collectorSuccess         *prometheus.Desc
-	collectorDuration        *prometheus.Desc
-	snapshotAge              *prometheus.Desc
-	buildInfo                *prometheus.Desc
-	managementAPIUp          *prometheus.Desc
-	clusterState             *prometheus.Desc
-	clusterCoordinatorCPU    *prometheus.Desc
-	clusterCoordinatorMemory *prometheus.Desc
-	clusterWorkerCPU         *prometheus.Desc
-	clusterWorkerMemory      *prometheus.Desc
-	nodeState                *prometheus.Desc
-	nodeReady                *prometheus.Desc
-	nodeCapacityCPU          *prometheus.Desc
-	nodeCapacityMemory       *prometheus.Desc
-	nodeCapacityStorage      *prometheus.Desc
-	nodeAllocatableCPU       *prometheus.Desc
-	nodeAllocatableMemory    *prometheus.Desc
-	nodeAllocatableStorage   *prometheus.Desc
-	nodeCondition            *prometheus.Desc
-	systemLocked             *prometheus.Desc
-	controlPlaneReady        *prometheus.Desc
-	nodesReady               *prometheus.Desc
-	nodesTotal               *prometheus.Desc
-	alertListComplete        *prometheus.Desc
-	alertDetailDeferred      *prometheus.Desc
-	alertPipelineReady       *prometheus.Desc
-	kafkaPublishSuccess      *prometheus.Desc
-	kafkaPublishDuration     *prometheus.Desc
-	kafkaEventsPublished     *prometheus.Desc
-	kafkaEventsFailed        *prometheus.Desc
-	kafkaBufferedEvents      *prometheus.Desc
+	monitoringEnabled                 *prometheus.Desc
+	up                                *prometheus.Desc
+	collectorSuccess                  *prometheus.Desc
+	collectorDuration                 *prometheus.Desc
+	snapshotAge                       *prometheus.Desc
+	buildInfo                         *prometheus.Desc
+	managementAPIUp                   *prometheus.Desc
+	clusterState                      *prometheus.Desc
+	clusterCoordinatorCPU             *prometheus.Desc
+	clusterCoordinatorMemory          *prometheus.Desc
+	clusterWorkerCPU                  *prometheus.Desc
+	clusterWorkerMemory               *prometheus.Desc
+	nodeState                         *prometheus.Desc
+	nodeReady                         *prometheus.Desc
+	nodeCapacityCPU                   *prometheus.Desc
+	nodeCapacityMemory                *prometheus.Desc
+	nodeCapacityStorage               *prometheus.Desc
+	nodeAllocatableCPU                *prometheus.Desc
+	nodeAllocatableMemory             *prometheus.Desc
+	nodeAllocatableStorage            *prometheus.Desc
+	nodeCondition                     *prometheus.Desc
+	systemLocked                      *prometheus.Desc
+	controlPlaneReady                 *prometheus.Desc
+	nodesReady                        *prometheus.Desc
+	nodesTotal                        *prometheus.Desc
+	alertListComplete                 *prometheus.Desc
+	alertDetailDeferred               *prometheus.Desc
+	alertPipelineReady                *prometheus.Desc
+	kafkaPublishSuccess               *prometheus.Desc
+	kafkaPublishDuration              *prometheus.Desc
+	kafkaEventsPublished              *prometheus.Desc
+	kafkaEventsFailed                 *prometheus.Desc
+	kafkaBufferedEvents               *prometheus.Desc
+	serviceabilityLogListComplete     *prometheus.Desc
+	serviceabilityLogDetailDeferred   *prometheus.Desc
+	serviceabilityLogPipelineReady    *prometheus.Desc
+	serviceabilityLogPublishSuccess   *prometheus.Desc
+	serviceabilityLogPublishDuration  *prometheus.Desc
+	serviceabilityLogRecordsPublished *prometheus.Desc
+	serviceabilityLogRecordsFailed    *prometheus.Desc
+	serviceabilityLogBufferedRecords  *prometheus.Desc
 }
 
 type PipelineMode struct {
-	ResourcesEnabled bool
-	AlertsEnabled    bool
+	ResourcesEnabled          bool
+	AlertsEnabled             bool
+	ServiceabilityLogsEnabled bool
 }
 
 func NewCollector(store *snapshot.Store, staleAfter time.Duration, build BuildInfo, modes ...PipelineMode) *Collector {
@@ -68,39 +78,48 @@ func NewCollector(store *snapshot.Store, staleAfter time.Duration, build BuildIn
 	return &Collector{
 		store: store, staleAfter: staleAfter, build: build,
 		resourcesEnabled: mode.ResourcesEnabled, alertsEnabled: mode.AlertsEnabled,
-		monitoringEnabled:        descLabels("ddae_monitoring_enabled", "Configured monitoring pipeline is enabled (1) or disabled (0).", "pipeline"),
-		up:                       desc("ddae_up", "1 only when the approved target-success policy is satisfied by a current snapshot; otherwise 0."),
-		collectorSuccess:         descLabels("ddae_collector_success", "Last attempted collector cycle succeeded (1) or failed (0).", "collector"),
-		collectorDuration:        descLabels("ddae_collector_duration_seconds", "Duration of the last collector attempt in seconds.", "collector"),
-		snapshotAge:              desc("ddae_snapshot_age_seconds", "Seconds since the newest successfully published required snapshot."),
-		buildInfo:                descLabels("ddae_build_info", "Constant 1; changes only when the exporter build changes.", "version", "go_version"),
-		managementAPIUp:          desc("ddae_management_api_up", "Documented reachability status and successful authenticated request."),
-		clusterState:             descLabels("ddae_cluster_state_info", "One-hot state using available or unknown; cluster is the Dell cluster id.", "cluster", "state"),
-		clusterCoordinatorCPU:    descLabels("ddae_cluster_coordinator_configured_cpu_cores", "Configured DDAE coordinator CPU cores, not usage.", "cluster"),
-		clusterCoordinatorMemory: descLabels("ddae_cluster_coordinator_configured_memory_bytes", "Configured coordinator memory converted from a validated quantity to bytes.", "cluster"),
-		clusterWorkerCPU:         descLabels("ddae_cluster_worker_configured_cpu_cores", "CPU quantity returned by the cluster worker configuration object; no aggregate or utilization meaning is implied.", "cluster"),
-		clusterWorkerMemory:      descLabels("ddae_cluster_worker_configured_memory_bytes", "Memory quantity returned by the cluster worker configuration object, converted to bytes; no aggregate or utilization meaning is implied.", "cluster"),
-		nodeState:                descLabels("ddae_node_state_info", "One-hot state from the documented bounded node-state enum; node is the Dell node id.", "node", "state"),
-		nodeReady:                descLabels("ddae_node_ready", "1 only for documented Ready; 0 for other known states.", "node"),
-		nodeCapacityCPU:          descLabels("ddae_node_capacity_cpu_cores", "Total capacity in CPU cores, not utilization.", "node"),
-		nodeCapacityMemory:       descLabels("ddae_node_capacity_memory_bytes", "Total memory capacity converted to bytes.", "node"),
-		nodeCapacityStorage:      descLabels("ddae_node_capacity_ephemeral_storage_bytes", "Total ephemeral storage capacity converted to bytes.", "node"),
-		nodeAllocatableCPU:       descLabels("ddae_node_allocatable_cpu_cores", "Allocatable CPU cores, not current unused CPU.", "node"),
-		nodeAllocatableMemory:    descLabels("ddae_node_allocatable_memory_bytes", "Allocatable memory bytes, not current unused memory.", "node"),
-		nodeAllocatableStorage:   descLabels("ddae_node_allocatable_ephemeral_storage_bytes", "Allocatable ephemeral storage bytes.", "node"),
-		nodeCondition:            descLabels("ddae_node_condition", "Boolean condition for the fixed set disk_pressure, memory_pressure.", "node", "condition"),
-		systemLocked:             desc("ddae_system_locked", "1 when the appliance is locked by another job."),
-		controlPlaneReady:        desc("ddae_control_plane_ready", "Boolean readiness of control-plane nodes."),
-		nodesReady:               desc("ddae_nodes_ready", "Current ready-node count."),
-		nodesTotal:               desc("ddae_nodes_total", "Current total-node count."),
-		alertListComplete:        desc("ddae_alert_list_complete", "1 only when the returned list is structurally valid and totalRecords is not greater than the usable returned result count."),
-		alertDetailDeferred:      desc("ddae_alert_detail_deferred", "Number of still-listed alert IDs deferred after the last cycle because of the configured request cap."),
-		alertPipelineReady:       desc("ddae_alert_pipeline_ready", "1 only when list/detail collection, persistent state and outbox-capacity requirements are satisfied."),
-		kafkaPublishSuccess:      desc("ddae_kafka_publish_success", "Last required Kafka publish batch was acknowledged (1) or failed (0)."),
-		kafkaPublishDuration:     desc("ddae_kafka_publish_duration_seconds", "Duration of the last required Kafka publish batch in seconds."),
-		kafkaEventsPublished:     desc("ddae_kafka_events_published_total", "Total events acknowledged by Kafka; producer retry attempts do not increment it."),
-		kafkaEventsFailed:        descLabels("ddae_kafka_events_failed_total", "Total events whose approved delivery policy ended in failure, using a fixed reason set.", "reason"),
-		kafkaBufferedEvents:      desc("ddae_kafka_buffered_events", "Current number of events retained for retry under the approved bounded buffering policy."),
+		serviceabilityLogsEnabled:         mode.ServiceabilityLogsEnabled,
+		monitoringEnabled:                 descLabels("ddae_monitoring_enabled", "Configured monitoring pipeline is enabled (1) or disabled (0).", "pipeline"),
+		up:                                desc("ddae_up", "1 only when the approved target-success policy is satisfied by a current snapshot; otherwise 0."),
+		collectorSuccess:                  descLabels("ddae_collector_success", "Last attempted collector cycle succeeded (1) or failed (0).", "collector"),
+		collectorDuration:                 descLabels("ddae_collector_duration_seconds", "Duration of the last collector attempt in seconds.", "collector"),
+		snapshotAge:                       desc("ddae_snapshot_age_seconds", "Seconds since the newest successfully published required snapshot."),
+		buildInfo:                         descLabels("ddae_build_info", "Constant 1; changes only when the exporter build changes.", "version", "go_version"),
+		managementAPIUp:                   desc("ddae_management_api_up", "Documented reachability status and successful authenticated request."),
+		clusterState:                      descLabels("ddae_cluster_state_info", "One-hot state using available or unknown; cluster is the Dell cluster id.", "cluster", "state"),
+		clusterCoordinatorCPU:             descLabels("ddae_cluster_coordinator_configured_cpu_cores", "Configured DDAE coordinator CPU cores, not usage.", "cluster"),
+		clusterCoordinatorMemory:          descLabels("ddae_cluster_coordinator_configured_memory_bytes", "Configured coordinator memory converted from a validated quantity to bytes.", "cluster"),
+		clusterWorkerCPU:                  descLabels("ddae_cluster_worker_configured_cpu_cores", "CPU quantity returned by the cluster worker configuration object; no aggregate or utilization meaning is implied.", "cluster"),
+		clusterWorkerMemory:               descLabels("ddae_cluster_worker_configured_memory_bytes", "Memory quantity returned by the cluster worker configuration object, converted to bytes; no aggregate or utilization meaning is implied.", "cluster"),
+		nodeState:                         descLabels("ddae_node_state_info", "One-hot state from the documented bounded node-state enum; node is the Dell node id.", "node", "state"),
+		nodeReady:                         descLabels("ddae_node_ready", "1 only for documented Ready; 0 for other known states.", "node"),
+		nodeCapacityCPU:                   descLabels("ddae_node_capacity_cpu_cores", "Total capacity in CPU cores, not utilization.", "node"),
+		nodeCapacityMemory:                descLabels("ddae_node_capacity_memory_bytes", "Total memory capacity converted to bytes.", "node"),
+		nodeCapacityStorage:               descLabels("ddae_node_capacity_ephemeral_storage_bytes", "Total ephemeral storage capacity converted to bytes.", "node"),
+		nodeAllocatableCPU:                descLabels("ddae_node_allocatable_cpu_cores", "Allocatable CPU cores, not current unused CPU.", "node"),
+		nodeAllocatableMemory:             descLabels("ddae_node_allocatable_memory_bytes", "Allocatable memory bytes, not current unused memory.", "node"),
+		nodeAllocatableStorage:            descLabels("ddae_node_allocatable_ephemeral_storage_bytes", "Allocatable ephemeral storage bytes.", "node"),
+		nodeCondition:                     descLabels("ddae_node_condition", "Boolean condition for the fixed set disk_pressure, memory_pressure.", "node", "condition"),
+		systemLocked:                      desc("ddae_system_locked", "1 when the appliance is locked by another job."),
+		controlPlaneReady:                 desc("ddae_control_plane_ready", "Boolean readiness of control-plane nodes."),
+		nodesReady:                        desc("ddae_nodes_ready", "Current ready-node count."),
+		nodesTotal:                        desc("ddae_nodes_total", "Current total-node count."),
+		alertListComplete:                 desc("ddae_alert_list_complete", "1 only when the returned list is structurally valid and totalRecords is not greater than the usable returned result count."),
+		alertDetailDeferred:               desc("ddae_alert_detail_deferred", "Number of still-listed alert IDs deferred after the last cycle because of the configured request cap."),
+		alertPipelineReady:                desc("ddae_alert_pipeline_ready", "1 only when list/detail collection, persistent state and outbox-capacity requirements are satisfied."),
+		kafkaPublishSuccess:               desc("ddae_kafka_publish_success", "Last required Kafka publish batch was acknowledged (1) or failed (0)."),
+		kafkaPublishDuration:              desc("ddae_kafka_publish_duration_seconds", "Duration of the last required Kafka publish batch in seconds."),
+		kafkaEventsPublished:              desc("ddae_kafka_events_published_total", "Total events acknowledged by Kafka; producer retry attempts do not increment it."),
+		kafkaEventsFailed:                 descLabels("ddae_kafka_events_failed_total", "Total events whose approved delivery policy ended in failure, using a fixed reason set.", "reason"),
+		kafkaBufferedEvents:               desc("ddae_kafka_buffered_events", "Current number of events retained for retry under the approved bounded buffering policy."),
+		serviceabilityLogListComplete:     desc("ddae_serviceability_log_list_complete", "1 only when the latest list passes structural and total-record completeness checks."),
+		serviceabilityLogDetailDeferred:   desc("ddae_serviceability_log_detail_deferred", "Number of listed details deferred by the last bounded cycle."),
+		serviceabilityLogPipelineReady:    desc("ddae_serviceability_log_pipeline_ready", "1 only when enabled list/detail, dedicated state and capacity conditions are healthy."),
+		serviceabilityLogPublishSuccess:   desc("ddae_serviceability_log_kafka_publish_success", "Last required serviceability log publish batch was acknowledged."),
+		serviceabilityLogPublishDuration:  desc("ddae_serviceability_log_kafka_publish_duration_seconds", "Duration of the last required serviceability log publish batch in seconds."),
+		serviceabilityLogRecordsPublished: desc("ddae_serviceability_log_records_published_total", "Serviceability log records acknowledged by Kafka, excluding producer retries."),
+		serviceabilityLogRecordsFailed:    descLabels("ddae_serviceability_log_records_failed_total", "Serviceability log records whose bounded delivery policy ended in a fixed error class.", "reason"),
+		serviceabilityLogBufferedRecords:  desc("ddae_serviceability_log_buffered_records", "Records currently retained in the dedicated serviceability log outbox."),
 	}
 }
 
@@ -146,6 +165,16 @@ func (c *Collector) Describe(output chan<- *prometheus.Desc) {
 			output <- descriptor
 		}
 	}
+	if c.serviceabilityLogsEnabled {
+		for _, descriptor := range []*prometheus.Desc{
+			c.serviceabilityLogListComplete, c.serviceabilityLogDetailDeferred,
+			c.serviceabilityLogPipelineReady, c.serviceabilityLogPublishSuccess,
+			c.serviceabilityLogPublishDuration, c.serviceabilityLogRecordsPublished,
+			c.serviceabilityLogRecordsFailed, c.serviceabilityLogBufferedRecords,
+		} {
+			output <- descriptor
+		}
+	}
 }
 
 func (c *Collector) Collect(output chan<- prometheus.Metric) {
@@ -153,6 +182,7 @@ func (c *Collector) Collect(output chan<- prometheus.Metric) {
 	view := c.store.Load()
 	output <- gauge(c.monitoringEnabled, boolean(c.resourcesEnabled), "resources")
 	output <- gauge(c.monitoringEnabled, boolean(c.alertsEnabled), "alerts")
+	output <- gauge(c.monitoringEnabled, boolean(c.serviceabilityLogsEnabled), "serviceability_logs")
 	output <- gauge(c.buildInfo, 1, c.build.Version, c.build.GoVersion)
 
 	if c.resourcesEnabled {
@@ -231,6 +261,24 @@ func (c *Collector) Collect(output chan<- prometheus.Metric) {
 			output <- prometheus.MustNewConstMetric(c.kafkaEventsFailed, prometheus.CounterValue, float64(view.KafkaFailedTotal[class]), string(class))
 		}
 		output <- gauge(c.kafkaBufferedEvents, float64(view.KafkaBuffered))
+	}
+
+	if c.serviceabilityLogsEnabled {
+		for _, name := range []string{"serviceability_log_list", "serviceability_log_detail"} {
+			status := view.Collectors[name]
+			output <- gauge(c.collectorSuccess, boolean(status.Success), name)
+			output <- gauge(c.collectorDuration, status.Duration.Seconds(), name)
+		}
+		output <- gauge(c.serviceabilityLogListComplete, boolean(view.ServiceabilityLogListComplete))
+		output <- gauge(c.serviceabilityLogDetailDeferred, float64(view.ServiceabilityLogDeferred))
+		output <- gauge(c.serviceabilityLogPipelineReady, boolean(view.ServiceabilityLogPipelineReady))
+		output <- gauge(c.serviceabilityLogPublishSuccess, boolean(view.ServiceabilityLogPublishSuccess))
+		output <- gauge(c.serviceabilityLogPublishDuration, view.ServiceabilityLogPublishDuration.Seconds())
+		output <- prometheus.MustNewConstMetric(c.serviceabilityLogRecordsPublished, prometheus.CounterValue, float64(view.ServiceabilityLogPublishedTotal))
+		for _, class := range failureClasses {
+			output <- prometheus.MustNewConstMetric(c.serviceabilityLogRecordsFailed, prometheus.CounterValue, float64(view.ServiceabilityLogFailedTotal[class]), string(class))
+		}
+		output <- gauge(c.serviceabilityLogBufferedRecords, float64(view.ServiceabilityLogBuffered))
 	}
 }
 

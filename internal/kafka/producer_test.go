@@ -42,9 +42,48 @@ func TestPublisherAcknowledgesOnlySuccessfulPublish(t *testing.T) {
 	}
 
 	store = &fakeOutbox{records: []outbox.Record{{Sequence: 2}}}
+	diagnostics = snapshot.NewStore()
+	diagnostics.SetAlertCollectionReady(true)
+	diagnostics.SetAlertPipelineStateHealthy(true)
 	publisher = NewPublisher(fakeProducer{err: errors.New("broker details")}, store, diagnostics, nil)
 	publisher.flush(context.Background())
 	if len(store.acked) != 0 || len(store.records) != 1 {
 		t.Fatal("failed publish removed outbox record")
+	}
+	if !diagnostics.Load().AlertPublisherStateOK || !diagnostics.Load().AlertPipelineReady {
+		t.Fatalf("broker-only failure changed state health: %#v", diagnostics.Load())
+	}
+}
+
+func TestPublisherStateFailuresAreStickyUntilPublisherRecovery(t *testing.T) {
+	for _, operation := range []string{"records", "acknowledge", "health"} {
+		t.Run(operation, func(t *testing.T) {
+			store := &fakeOutbox{}
+			switch operation {
+			case "records":
+				store.recordsErr = errors.New("state-canary")
+			case "acknowledge":
+				store.records = []outbox.Record{{Sequence: 1}}
+				store.ackErr = errors.New("state-canary")
+			case "health":
+				store.healthErr = errors.New("state-canary")
+			}
+			diagnostics := snapshot.NewStore()
+			diagnostics.SetAlertCollectionReady(true)
+			diagnostics.SetAlertPipelineStateHealthy(true)
+			publisher := NewPublisher(fakeProducer{}, store, diagnostics, nil)
+			publisher.flush(context.Background())
+			if diagnostics.Load().AlertPublisherStateOK || diagnostics.Load().AlertPipelineReady {
+				t.Fatalf("%s failure reported healthy: %#v", operation, diagnostics.Load())
+			}
+			store.recordsErr = nil
+			store.ackErr = nil
+			store.healthErr = nil
+			store.records = nil
+			publisher.flush(context.Background())
+			if !diagnostics.Load().AlertPublisherStateOK || !diagnostics.Load().AlertPipelineReady {
+				t.Fatalf("%s did not recover: %#v", operation, diagnostics.Load())
+			}
+		})
 	}
 }

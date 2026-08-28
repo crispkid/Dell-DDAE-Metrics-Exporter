@@ -2,8 +2,8 @@
 
 Dell DDAE Metrics Exporter 是以 Go 開發的唯讀監控服務，目標相容版本為 Dell Data
 Domain Active Enterprise（DDAE）1.5.0。服務將叢集、節點與 appliance operability
-資料轉換為 Prometheus metrics，並將 serviceability alerts 整理為具版本的 Kafka
-事件。
+資料轉換為 Prometheus metrics，並將 serviceability alerts 與選用的 Serviceability
+Logs / Events 整理為彼此獨立、具版本的 Kafka 事件。
 
 ## 專案能力
 
@@ -13,7 +13,9 @@ Domain Active Enterprise（DDAE）1.5.0。服務將叢集、節點與 appliance 
 | Prometheus 輸出 | 由背景收集程序維護 current snapshot，並透過 `/metrics` 提供穩定的 metric contract。 |
 | DDAE 告警收集 | 從 serviceability issue 清單取得 ID，再以有限的並行量讀取 detail。 |
 | Kafka 告警發布 | 將通過型別與欄位 allowlist 的告警寫入 durable bbolt outbox，再以 at-least-once、idempotent producer 發布。 |
-| 獨立 pipeline | Resource monitoring 與 alert monitoring 可分別啟用並設定各自週期，支援 dual、resource-only 與 alert-only 三種模式。 |
+| Serviceability Logs 收集 | 從 Serviceability Event 清單取得安全 ID，以 bounded list/detail 流程建立 typed log event，並將新或變更內容發布至專用 Kafka topic。 |
+| 隔離的 Logs delivery | 使用 `serviceability-logs.db`、專用 outbox/checkpoints、Kafka producer、topic、capacity 與 readiness，保護既有 alerts。 |
+| 獨立 pipeline | Resources、alerts 與 `serviceability_logs` 可分別啟用及設定週期；Serviceability Logs 預設關閉。 |
 | YAML 設定 | 支援具版本、具型別、大小受限的 YAML；命令列與環境變數可選擇設定檔。 |
 | TLS | DDAE 與 Kafka 預設驗證 certificate 與 hostname，支援自訂 CA；Kafka 另支援 mTLS。 |
 | Kafka 驗證 | 支援 `PLAIN`、`SCRAM-SHA-256` 與 `SCRAM-SHA-512` SASL。 |
@@ -28,21 +30,25 @@ Dell DDAE read-only Management API
         +--> resource collectors --> current snapshot --> Prometheus /metrics
         |
         +--> alert list --> bounded detail GETs --> typed event --> durable outbox --> Kafka
+        |
+        +--> log list --> bounded detail GETs --> typed log event --> dedicated outbox --> dedicated Kafka topic
 ```
 
 ## Monitoring 模式
 
 有效設定至少啟用一條 pipeline：
 
-| 模式 | `monitoring.resources.enabled` | `monitoring.alerts.enabled` | 運行內容 |
-|---|---:|---:|---|
-| Dual | `true` | `true` | 提供 resource metrics，並將 alerts 發布至 Kafka。 |
-| Resource-only | `true` | `false` | 提供 DDAE resource metrics，執行時只需要 DDAE 連線與 credentials。 |
-| Alert-only | `false` | `true` | 收集 alerts 並發布至 Kafka，使用 persistent state 保存 outbox 與 checkpoints。 |
+| 模式範例 | `resources` | `alerts` | `serviceability_logs` | 運行內容 |
+|---|---:|---:|---:|---|
+| 預設 | `true` | `true` | `false` | 提供 resource metrics 並發布 alerts。 |
+| Resource-only | `true` | `false` | `false` | 提供 DDAE resource metrics。 |
+| Alert-only | `false` | `true` | `false` | 發布 alerts 並使用 alert persistent state。 |
+| Logs-only | `false` | `false` | `true` | 發布 Serviceability Logs 並使用專用 log state。 |
+| 全部啟用 | `true` | `true` | `true` | 三條 pipeline 獨立排程、儲存與判定 readiness。 |
 
-兩條 pipeline 預設皆為 `true`。啟用的 pipeline 會參與 `/readyz` 判定；
+任意至少一條 pipeline 啟用的組合皆有效。啟用的 pipeline 會參與 `/readyz` 判定；
 `ddae_monitoring_enabled{pipeline="resources"}` 與
-`ddae_monitoring_enabled{pipeline="alerts"}` 可直接呈現實際模式。
+`pipeline="alerts"`、`pipeline="serviceability_logs"` 三筆固定 series 可直接呈現模式。
 
 ## DDAE 唯讀介面
 
@@ -58,6 +64,8 @@ Exporter 使用下列 API：
 | System shutdown | `GET /rest/v1/system-shutdown` | 取得 control-plane 與 node readiness。 |
 | Alert list | `GET /rest/v1/serviceability-issues` | 取得告警清單與 lifecycle input。 |
 | Alert detail | `GET /rest/v1/serviceability-issues/{id}` | 取得經 allowlist 處理的告警內容。 |
+| Serviceability Log list | `GET /rest/v1/serviceability-events` | 發現 Serviceability Log IDs 並評估 completeness。 |
+| Serviceability Log detail | `GET /rest/v1/serviceability-events/{id}` | 取得經 typed allowlist 處理的 log detail。 |
 
 部署時適合使用 dedicated、least-privilege、read-only DDAE identity。TLS 最低版本為
 TLS 1.2，certificate chain 與 hostname verification 預設啟用。
@@ -68,7 +76,7 @@ TLS 1.2，certificate chain 與 hostname verification 預設啟用。
 
 | Endpoint | 回應內容 |
 |---|---|
-| `GET /metrics` | Prometheus exposition 與 collector diagnostics。 |
+| `GET /metrics` | Prometheus exposition 與 collector diagnostics；最多同時處理 5 個 requests，每個 handler 的 timeout 為 9 秒。 |
 | `GET /healthz` | 程序存活狀態。 |
 | `GET /readyz` | 所有已啟用 pipeline 的 readiness；ready 時回 `200`，其餘狀態回 `503`。 |
 
@@ -79,7 +87,7 @@ TLS 1.2，certificate chain 與 hostname verification 預設啟用。
 | Metric | Type | 單位 | 值域與意義 |
 |---|---|---|---|
 | `ddae_build_info{version,go_version}` | gauge | 無單位 | 固定為 `1`；labels 表示 Exporter 與 Go build version。 |
-| `ddae_monitoring_enabled{pipeline}` | gauge | boolean | `0` 或 `1`；固定輸出 `pipeline="resources"` 與 `pipeline="alerts"` 兩筆 series。 |
+| `ddae_monitoring_enabled{pipeline}` | gauge | boolean | `0` 或 `1`；固定輸出 `resources`、`alerts`、`serviceability_logs` 三筆 series。 |
 | `ddae_collector_success{collector}` | gauge | boolean | `0` 或 `1`；最近一輪指定 collector 的結果，輸出已啟用 pipeline 的 collector labels。 |
 | `ddae_collector_duration_seconds{collector}` | gauge | seconds | 大於或等於 `0` 的秒數，可包含小數；輸出已啟用 pipeline 的 collector labels。 |
 
@@ -139,12 +147,25 @@ CPU、memory 與 storage 欄位在 DDAE response 缺少值時省略對應 series
 | `ddae_kafka_events_failed_total{reason}` | counter | events | 大於或等於 `0` 的整數；程序運行期間依固定 failure class 單調增加。 |
 | `ddae_kafka_buffered_events` | gauge | events | `0` 到 `state.outbox_max_events` 的整數；byte hard limit 也可能先限制可保存數量。 |
 
+### Serviceability Logs pipeline metrics 的單位與值域
+
+| Metric | Type | 單位 | 值域與意義 |
+|---|---|---|---|
+| `ddae_serviceability_log_list_complete` | gauge | boolean | `0` 或 `1`；最近 list 通過結構與 `totalRecords` completeness checks 時為 `1`。 |
+| `ddae_serviceability_log_detail_deferred` | gauge | logs | 大於或等於 `0` 的整數；最近 bounded cycle 延後的 detail 數量。 |
+| `ddae_serviceability_log_pipeline_ready` | gauge | boolean | `0` 或 `1`；list/detail、專用 state 與 capacity 健康時為 `1`。 |
+| `ddae_serviceability_log_kafka_publish_success` | gauge | boolean | `0` 或 `1`；最近 required log publish 已取得 Kafka acknowledgement 時為 `1`。 |
+| `ddae_serviceability_log_kafka_publish_duration_seconds` | gauge | seconds | 大於或等於 `0` 的秒數，可包含小數。 |
+| `ddae_serviceability_log_records_published_total` | counter | records | 大於或等於 `0` 且程序期間單調增加；計算 Kafka 已確認的 log records。 |
+| `ddae_serviceability_log_records_failed_total{reason}` | counter | records | 大於或等於 `0` 且依固定 failure class 單調增加。 |
+| `ddae_serviceability_log_buffered_records` | gauge | records | `0` 到 `state.serviceability_logs_outbox_max_events`；byte hard limit 也可能先限制數量。 |
+
 固定 label 值域如下：
 
 | Label | 固定值域 |
 |---|---|
-| `pipeline` | `resources`、`alerts` |
-| `collector` | `ping`、`clusters`、`nodes`、`lock`、`power`、`alert_list`、`alert_detail`；僅輸出已啟用 pipeline 的 collectors。 |
+| `pipeline` | `resources`、`alerts`、`serviceability_logs` |
+| `collector` | `ping`、`clusters`、`nodes`、`lock`、`power`、`alert_list`、`alert_detail`、`serviceability_log_list`、`serviceability_log_detail`；僅輸出已啟用 pipeline 的 collectors。 |
 | Cluster `state` | `available`、`unknown` |
 | Node `state` | `maintenance_mode`、`scheduling_disabled`、`not_ready`、`ready`、`restarting`、`shutting_down`、`powered_off`、`powering_on`、`unknown` |
 | `condition` | `disk_pressure`、`memory_pressure` |
@@ -235,6 +256,70 @@ Kafka consumer 可用下列固定 metadata 辨識資料：
 | `content-type` header | `application/json` |
 | `ddae-schema-version` header | `1.0` |
 
+## Kafka Serviceability Log event
+
+Serviceability Logs 使用獨立 schema identity、record kind、topic 與 state。每筆 typed
+JSON event 的 envelope：
+
+| Field | JSON type | 值域或來源 |
+|---|---|---|
+| `schema_version` | string | 固定為 `1.0`。 |
+| `event_type` | string | 固定為 `ddae.serviceability_log.upsert`。 |
+| `source_system` | string | 固定為 `dell_ddae`。 |
+| `source_instance` | string | YAML 的穩定 appliance identity，1–128 UTF-8 bytes。 |
+| `log_id` | string | Detail ID，1–256 UTF-8 bytes，並與 requested list ID 相同。 |
+| `content_hash_sha256` | string | Canonical normalized `log` object 的 64 字元小寫 SHA-256。 |
+| `observed_at` | string | UTC RFC 3339 observation time。 |
+| `log` | object | 下表的 typed allowlist fields。 |
+
+| Log field | JSON type | 值域／上限 |
+|---|---|---|
+| `severity` | string | `critical`、`error`、`warning`、`info`、`normal`、`unknown`。 |
+| `acknowledged` | boolean | `true` 或 `false`。 |
+| `occurrence_count` | integer | 大於或等於 `0`。 |
+| `created_at`、`updated_at` | string | UTC RFC 3339 timestamp。 |
+| `app_name`、`component`、`namespace` | string | 各最多 256 UTF-8 bytes。 |
+| `message` | string | 最多 8192 UTF-8 bytes。 |
+| `reason` | string | 最多 4096 UTF-8 bytes。 |
+| `remedies` | array of strings | 最多 32 筆，每筆最多 2048 UTF-8 bytes。 |
+| `resource_id`、`related` | string | 最多 512 UTF-8 bytes。 |
+| `symptom_id` | string | 最多 256 UTF-8 bytes。 |
+
+`labels`、`links` 與 unknown source fields 不會進入 event。Absent optional fields 會
+省略；invalid present values 會使該 event 失敗並保留既有 checkpoint。
+
+### Serviceability Log JSON 範本
+
+```json
+{
+  "schema_version": "1.0",
+  "event_type": "ddae.serviceability_log.upsert",
+  "source_system": "dell_ddae",
+  "source_instance": "fixture-site",
+  "log_id": "log-1",
+  "content_hash_sha256": "a51e004808c177b20fc11b89fdfc0823f10e9dccf5a4a11481158a802fd0d17a",
+  "observed_at": "2026-08-24T03:00:00Z",
+  "log": {
+    "severity": "warning",
+    "acknowledged": false,
+    "occurrence_count": 2,
+    "created_at": "2026-08-24T02:00:00Z",
+    "message": "synthetic serviceability log",
+    "remedies": [
+      "inspect synthetic node"
+    ]
+  }
+}
+```
+
+| Kafka record 項目 | 契約 |
+|---|---|
+| Topic | `kafka.serviceability_logs_topic`，預設 `ddae-serviceability-logs`，與 alert topic 不同。 |
+| Key | `SHA-256(source_instance + NUL + serviceability_log + NUL + log_id)` 的 64 字元小寫 hex。 |
+| Headers | `content-type=application/json`、`ddae-schema-version=1.0`、`ddae-record-kind=serviceability_log`。 |
+| Delivery | 專用 durable outbox、`acks=all`、idempotent producer、per-key ordering 與 at-least-once replay。 |
+| Event size | 最大 256 KiB。 |
+
 ## 安裝前準備
 
 | 啟用範圍 | 準備項目 |
@@ -245,6 +330,7 @@ Kafka consumer 可用下列固定 metadata 辨識資料：
 | Alert pipeline | Kafka brokers、dedicated topic 與支援 TLS、`acks=all` 的 broker 設定。 |
 | Alert pipeline | 依環境選用 Kafka SASL、mTLS，或兩者組合。 |
 | Alert pipeline | 支援 file lock 與 fsync 的 persistent state directory；每個 DDAE target 使用一份獨立 state。 |
+| Serviceability Logs pipeline | 專用 Kafka topic/ACL、OpenSearch mapping 與 `serviceability-logs.db` 容量；首次啟用前完成配置。 |
 | Prometheus | Exporter listener 的受控連線路徑；跨主機連線可搭配 mTLS reverse proxy 或 service mesh。 |
 | Runtime | 已同步的系統時間，供 timeout、staleness 與 `observed_at` 使用。 |
 
@@ -293,10 +379,10 @@ chmod 0600 config.local.yaml
 
 | 區段 | 設定內容 |
 |---|---|
-| `monitoring` | 選擇 dual、resource-only 或 alert-only，並設定收集週期。 |
+| `monitoring` | 選擇所需的 resources、alerts、Serviceability Logs 組合，並設定各自收集週期。 |
 | `ddae` | 填入 DDAE HTTPS origin、stable source instance、credentials file paths 與 CA path。 |
-| `kafka` | Alert pipeline 啟用時填入 brokers、topic、TLS 與選用的 SASL 設定。 |
-| `state` | Alert pipeline 啟用時填入 absolute persistent directory。 |
+| `kafka` | Alerts 或 Serviceability Logs 啟用時填入 brokers、各自 topic、TLS 與選用的 SASL 設定。 |
+| `state` | 任一 Kafka pipeline 啟用時填入 absolute persistent directory 與各自 limits。 |
 | `server` | 選擇 Exporter listener 與 shutdown grace period。 |
 | `logging` | 選擇 `json` 或 `text` 格式，以及 log level。 |
 
@@ -374,7 +460,7 @@ sudo install -o ddae-exporter -g ddae-exporter -m 0600 \
   /path/from/secret-manager/kafka-password /secure/runtime/kafka-password
 ```
 
-Resource-only 模式使用前三個 DDAE files。Dual 與 alert-only 模式依 Kafka SASL 設定
+Resource-only 模式使用前三個 DDAE files。Alerts 或 Serviceability Logs 啟用時依 Kafka SASL 設定
 加入 `kafka-password`。以目前登入帳號進行本機測試時，可將受控來源檔安裝到 repository
 內已由 `.gitignore` 排除的 `secrets/` directory，並在 YAML 填入 absolute paths：
 
@@ -431,7 +517,7 @@ YAML 使用 `version: 1`、單一 UTF-8 document、最大 1 MiB，並以 documen
 ```yaml
 version: 1 # 設定格式版本；目前固定使用整數 1。
 
-monitoring: # 兩條 monitoring pipelines 的父區段。
+monitoring: # 三條 monitoring pipelines 的父區段。
   resources: # Prometheus resource metrics pipeline。
     enabled: true # true 啟用 ping/clusters/nodes/lock/power collectors。
     interval: 30s # Resource background collection interval，使用 Go duration。
@@ -439,10 +525,19 @@ monitoring: # 兩條 monitoring pipelines 的父區段。
   alerts: # DDAE alert detail 到 Kafka 的 pipeline。
     enabled: true # true 啟用 alert list/detail、outbox 與 Kafka producer。
     interval: 30s # Alert-list background collection interval，使用 Go duration。
-    list_response_max_bytes: 8388608 # 單次 alert-list response 上限，單位 bytes。
+    list_response_max_bytes: 8388608 # 單次 alert-list response 上限，單位 bytes；允許範圍 1–67108864。
     detail: # Per-alert detail retrieval limits。
-      response_max_bytes: 1048576 # 每筆 alert-detail response 上限，單位 bytes。
+      response_max_bytes: 1048576 # 每筆 alert-detail response 上限，單位 bytes；允許範圍 1–67108864。
       refresh_interval: 10m # 已存在 alert 的重新讀取間隔，至少等於 alert interval。
+      max_per_cycle: 200 # 每輪最多 detail requests，允許範圍 1–10000。
+      concurrency: 4 # 同時 detail requests，範圍 1–128 且至多等於 max_per_cycle。
+  serviceability_logs: # DDAE Serviceability Logs / Events 到專用 Kafka topic 的 pipeline。
+    enabled: false # false 為預設；true 建立獨立 worker、producer 與 serviceability-logs.db。
+    interval: 30s # Serviceability Log list background interval，使用 Go duration。
+    list_response_max_bytes: 8388608 # 單次 log-list response 上限，單位 bytes；範圍 1–67108864。
+    detail: # Per-log detail retrieval limits。
+      response_max_bytes: 1048576 # 每筆 log-detail response 上限，單位 bytes；範圍 1–67108864。
+      refresh_interval: 10m # Listed log 的重新讀取間隔，至少等於 serviceability_logs interval。
       max_per_cycle: 200 # 每輪最多 detail requests，允許範圍 1–10000。
       concurrency: 4 # 同時 detail requests，範圍 1–128 且至多等於 max_per_cycle。
 
@@ -455,7 +550,7 @@ security: # 跨 target 的安全確認設定。
 
 ddae: # Dell DDAE Management API client 設定。
   base_url: https://ddae.example.invalid # 單一 HTTPS origin；填入實際 scheme、host 與 optional port。
-  source_instance: replace-with-stable-appliance-name # Kafka source identity；alert pipeline 啟用時必填。
+  source_instance: replace-with-stable-appliance-name # Kafka source identity；alerts 或 serviceability_logs 啟用時必填。
   credentials: # DDAE OAuth password-grant credential file paths。
     username_file: /secure/runtime/ddae-username # 內容只放 dedicated read-only username。
     password_file: /secure/runtime/ddae-password # 內容只放該 DDAE identity password。
@@ -465,13 +560,14 @@ ddae: # Dell DDAE Management API client 設定。
     insecure_skip_verify: false # 與 allow_insecure_tls 同為 true 時，關閉 DDAE certificate/hostname verification。
   request_timeout: 5s # 單次 token 或 DDAE request deadline，需小於 cycle_timeout。
   cycle_timeout: 20s # 單輪 aggregate deadline，需小於每條 enabled pipeline interval。
-  response_max_bytes: 4194304 # 一般 DDAE response body 上限，單位 bytes。
+  response_max_bytes: 4194304 # 一般 DDAE response body 上限，單位 bytes；允許範圍 1–67108864。
   retry_max: 2 # 初次 safe request 後的 retry 次數，允許範圍 0–10。
 
-kafka: # Alert pipeline 的 Kafka producer 設定。
-  brokers: # Kafka bootstrap broker sequence，alert pipeline 啟用時需要 1–64 筆。
+kafka: # Alert 與 Serviceability Logs producers 共用的連線安全設定。
+  brokers: # Kafka bootstrap broker sequence；任一 Kafka pipeline 啟用時需要 1–64 筆。
     - kafka.example.invalid:9093 # 單一 broker host:port；增加 broker 時重複此 list item。
-  topic: ddae-serviceability-alerts # Dedicated topic，最多 249 bytes。
+  topic: ddae-serviceability-alerts # Dedicated alert topic，最多 249 bytes。
+  serviceability_logs_topic: ddae-serviceability-logs # Dedicated log topic；必須與 alert topic 不同。
   client_id: ddae-exporter # Kafka client ID，1–128 bytes。
   tls: # Kafka broker TLS 與 optional mTLS 設定。
     ca_file: /etc/ddae-exporter/trust/kafka-ca.pem # 額外 broker PEM CA bundle；system roots 可省略。
@@ -484,12 +580,16 @@ kafka: # Alert pipeline 的 Kafka producer 設定。
     password_file: /secure/runtime/kafka-password # 內容只放 Kafka SASL password。
   publish_timeout: 10s # 每筆 produce acknowledgement hard deadline，最小 1s。
 
-state: # Alert outbox 與 checkpoint 的 persistent bbolt state。
-  dir: /var/lib/ddae-exporter # Alert pipeline 使用的 absolute writable directory。
+state: # Alert 與 Serviceability Logs 各自獨立的 persistent bbolt state。
+  dir: /var/lib/ddae-exporter # Enabled Kafka pipelines 使用的 absolute writable directory。
   outbox_max_bytes: 1073741824 # Outbox payload byte hard limit，單位 bytes。
   outbox_max_events: 100000 # Outbox record hard limit，允許範圍 1–10000000。
   checkpoint_retention: 720h # Alert 從 list 消失後的 checkpoint retention。
   checkpoint_max_alerts: 100000 # Retained alert checkpoints 上限，範圍 1–10000000。
+  serviceability_logs_outbox_max_bytes: 1073741824 # 專用 log outbox byte hard limit。
+  serviceability_logs_outbox_max_events: 100000 # 專用 log outbox record hard limit，範圍 1–10000000。
+  serviceability_logs_checkpoint_retention: 720h # Log 從 complete list 消失後的 checkpoint retention。
+  serviceability_logs_checkpoint_max_records: 100000 # Retained log checkpoints 上限，範圍 1–10000000。
 
 logging: # Structured application logging 設定。
   level: info # 可用 debug、info、warn、error。
@@ -505,17 +605,19 @@ logging: # Structured application logging 設定。
 | `monitoring.resources.stale_after` | `120s` | Current resource snapshot 的最大年齡。 |
 | `monitoring.alerts.enabled` | `true` | 控制 alert list/detail、Kafka 與 state。 |
 | `monitoring.alerts.interval` | `30s` | Alert list 背景週期。 |
+| `monitoring.serviceability_logs.enabled` | `false` | 控制 Serviceability Log list/detail、專用 Kafka producer 與專用 state。 |
+| `monitoring.serviceability_logs.interval` | `30s` | Serviceability Log list 背景週期。 |
 | `server.listen_address` | `127.0.0.1:9469` | HTTP listener。 |
 | `server.shutdown_grace_period` | `15s` | Cancellation、state sync 與 HTTP shutdown budget。 |
 | `ddae.base_url` | 所有模式 | 單一 DDAE HTTPS origin。 |
-| `ddae.source_instance` | Alert pipeline | 1–128 bytes 的穩定 event identity。 |
+| `ddae.source_instance` | Alerts 或 Serviceability Logs | 1–128 bytes 的穩定 event identity。 |
 | `ddae.credentials.username_file` | 所有模式 | DDAE username secret file。 |
 | `ddae.credentials.password_file` | 所有模式 | DDAE password secret file。 |
 | `ddae.credentials.client_secret_file` | 所有模式 | `dv-admin-rest` client secret file。 |
 | `ddae.tls.ca_file` | System roots | 額外的 PEM CA bundle。 |
 | `ddae.request_timeout` | `5s` | 單次 token 或 DDAE request deadline。 |
 | `ddae.cycle_timeout` | `20s` | 一輪 aggregate collection deadline。 |
-| `ddae.response_max_bytes` | `4194304` | 一般 DDAE response body hard limit，單位為 bytes。 |
+| `ddae.response_max_bytes` | `4194304` | 一般 DDAE response body hard limit，單位為 bytes；範圍 `1–67108864`。 |
 | `ddae.retry_max` | `2` | 初次 safe request 後的 retry 次數，範圍 `0–10`。 |
 
 Duration 使用 Go duration 語法，例如 `500ms`、`5s`、`10m`、`720h`。有效時間關係如下：
@@ -525,26 +627,44 @@ Duration 使用 Go duration 語法，例如 `500ms`、`5s`、`10m`、`720h`。�
 | `ddae.request_timeout < ddae.cycle_timeout` | 保留 cycle 聚合處理時間。 |
 | `ddae.cycle_timeout < enabled pipeline interval` | 確保每輪工作落在 pipeline 週期內。 |
 | `monitoring.resources.stale_after > monitoring.resources.interval` | 保留 resource snapshot freshness window。 |
+| `monitoring.serviceability_logs.detail.refresh_interval >= monitoring.serviceability_logs.interval` | 保證 listed logs 依 bounded policy 定期 refresh。 |
 
 ### Alert detail
 
 | YAML key | Default | 說明 |
 |---|---:|---|
-| `monitoring.alerts.list_response_max_bytes` | `8388608` | Alert list response hard limit。 |
-| `monitoring.alerts.detail.response_max_bytes` | `1048576` | 每筆 detail response hard limit。 |
+| `monitoring.alerts.list_response_max_bytes` | `8388608` | Alert list response hard limit，範圍 `1–67108864` bytes。 |
+| `monitoring.alerts.detail.response_max_bytes` | `1048576` | 每筆 detail response hard limit，範圍 `1–67108864` bytes。 |
 | `monitoring.alerts.detail.refresh_interval` | `10m` | 清單內 alert 的 detail refresh 間隔，設定值至少等於 alert interval。 |
 | `monitoring.alerts.detail.max_per_cycle` | `200` | 每輪 detail requests 上限，範圍 `1–10000`。 |
 | `monitoring.alerts.detail.concurrency` | `4` | 同時 detail requests，範圍 `1–128`，設定值至多等於 `max_per_cycle`。 |
 
 超過單輪上限的項目會依 deterministic 順序延後，並由
-`ddae_alert_detail_deferred` 呈現數量。
+`ddae_alert_detail_deferred` 呈現數量。New／changed 與 refresh-due 分成兩個佇列；
+兩者都有 backlog 時，`max_per_cycle: 1` 會輪替處理，較大的上限至少保留一個且約
+四分之一的名額給 refresh-due，再將未使用名額借給另一類。
+
+### Serviceability Log detail
+
+| YAML key | Default | 說明 |
+|---|---:|---|
+| `monitoring.serviceability_logs.list_response_max_bytes` | `8388608` | Log list response hard limit，範圍 `1–67108864` bytes。 |
+| `monitoring.serviceability_logs.detail.response_max_bytes` | `1048576` | 每筆 log detail response hard limit，範圍 `1–67108864` bytes。 |
+| `monitoring.serviceability_logs.detail.refresh_interval` | `10m` | Listed log detail refresh 間隔，至少等於 log interval。 |
+| `monitoring.serviceability_logs.detail.max_per_cycle` | `200` | 每輪 detail requests 上限，範圍 `1–10000`。 |
+| `monitoring.serviceability_logs.detail.concurrency` | `4` | 同時 detail requests，範圍 `1–128`，至多等於 `max_per_cycle`。 |
+
+New／changed 與 refresh-due 使用獨立的 deterministic fairness 排程。Incomplete list
+仍可處理安全 IDs，並以 `ddae_serviceability_log_list_complete 0` 與 readiness `0`
+呈現；只有 complete list 能進行 absence retention，且不會建立 deletion event。
 
 ### Kafka 與 persistent state
 
 | YAML key | Default／啟用條件 | 說明 |
 |---|---|---|
-| `kafka.brokers` | Alert pipeline | 1–64 個 Kafka broker addresses；所有連線使用 TLS。 |
+| `kafka.brokers` | Alerts 或 Serviceability Logs | 1–64 個 Kafka broker addresses；所有連線使用 TLS。 |
 | `kafka.topic` | Alert pipeline | Dedicated topic，最長 249 bytes。 |
+| `kafka.serviceability_logs_topic` | `ddae-serviceability-logs` | Dedicated log topic，最長 249 bytes；兩條 Kafka pipelines 同時啟用時必須與 alert topic 不同。 |
 | `kafka.client_id` | `ddae-exporter` | Kafka client identity。 |
 | `kafka.tls.ca_file` | System roots | 額外的 broker CA PEM bundle。 |
 | `kafka.tls.client_cert_file` | 選用 | Kafka mTLS certificate path，搭配 client key。 |
@@ -553,16 +673,36 @@ Duration 使用 Go duration 語法，例如 `500ms`、`5s`、`10m`、`720h`。�
 | `kafka.sasl.username` | SASL 啟用時 | Kafka SASL username。 |
 | `kafka.sasl.password_file` | SASL 啟用時 | Kafka SASL password secret file。 |
 | `kafka.publish_timeout` | `10s` | 每筆 publish 的 hard deadline，包含已送出的 in-flight produce；最小 `1s`。逾時時保留 outbox record 供重播。 |
-| `state.dir` | `/var/lib/ddae-exporter` | Alert pipeline 的 absolute persistent directory。 |
+| `state.dir` | `/var/lib/ddae-exporter` | Enabled Kafka pipelines 的 absolute persistent directory。 |
 | `state.outbox_max_bytes` | `1073741824` | Durable outbox byte hard limit。 |
 | `state.outbox_max_events` | `100000` | Durable outbox record hard limit。 |
 | `state.checkpoint_retention` | `720h` | Alert checkpoint retention。 |
 | `state.checkpoint_max_alerts` | `100000` | Retained alert checkpoints hard limit。 |
+| `state.serviceability_logs_outbox_max_bytes` | `1073741824` | `serviceability-logs.db` outbox byte hard limit。 |
+| `state.serviceability_logs_outbox_max_events` | `100000` | 專用 log outbox record hard limit。 |
+| `state.serviceability_logs_checkpoint_retention` | `720h` | Complete list 中消失且無 pending output 的 log checkpoint retention。 |
+| `state.serviceability_logs_checkpoint_max_records` | `100000` | Retained log checkpoints hard limit。 |
 
-Outbox 保留待確認 records；Kafka 恢復後會依序重播。若 hard timeout 發生在 broker
+兩個 outbox 分別保留待確認 records；Kafka 恢復後會依序重播。若 hard timeout 發生在 broker
 可能已接受、但 client 尚未收到確認的期間，該 record 仍會保留，因此可能以相同 key
 再次送出。Consumer 必須以 record key 做 idempotent upsert。達到任一 outbox hard
-limit 時會保留現有 records、暫停新增內容，並將 alert readiness 設為 `0`。
+limit 時會保留現有 records、暫停該 pipeline 的新增內容，並只將對應的 alert 或
+Serviceability Logs readiness 設為 `0`。
+
+`state.db` 使用明確的 state schema version。啟動時會在單一 bbolt transaction
+驗證 outbox records、checkpoints 與交叉關係；有效的舊版無版本資料庫會就地標記為
+目前版本，並由已驗證 records 重新計算 event count 與 byte count。未支援的未來版本
+或 primary state 損壞會讓啟動 fail closed，原始 records/checkpoints 不會被自動刪除。
+升級前先停止唯一 writer 並保留受保護的 `state.db` 副本。
+
+`serviceability-logs.db` 使用相同的 schema/integrity model，但具有獨立 buckets、
+derived counters、limits 與 file lock。Log pipeline capacity 或 corruption 不會消耗、
+acknowledge 或修改 `state.db`。Rollback 可先將 `monitoring.serviceability_logs.enabled`
+設為 `false` 並保留專用資料庫供稍後 replay。
+
+Token cache 以 generation 區分 renewal。併發的初次取 token 或 401 renewal 共享同一個
+結果；延遲抵達的舊 generation 401 會直接採用已存在的新 token。Token transport、
+HTTP `429` 與 `5xx` 使用 `ddae.retry_max` 的有限重試預算，credential rejection 不重試。
 
 ### Logging
 
@@ -608,6 +748,13 @@ CA 並維持三個欄位為 `false`。Global flag 為 `true`、target flag 為 `
 | `monitoring.resources.stale_after` | `DDAE_STALE_AFTER` |
 | `monitoring.alerts.enabled` | `DDAE_ALERT_MONITORING_ENABLED` |
 | `monitoring.alerts.interval` | `DDAE_ALERT_COLLECTION_INTERVAL` |
+| `monitoring.serviceability_logs.enabled` | `DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED` |
+| `monitoring.serviceability_logs.interval` | `DDAE_SERVICEABILITY_LOG_COLLECTION_INTERVAL` |
+| `monitoring.serviceability_logs.list_response_max_bytes` | `SERVICEABILITY_LOG_LIST_RESPONSE_MAX_BYTES` |
+| `monitoring.serviceability_logs.detail.response_max_bytes` | `SERVICEABILITY_LOG_DETAIL_RESPONSE_MAX_BYTES` |
+| `monitoring.serviceability_logs.detail.refresh_interval` | `SERVICEABILITY_LOG_DETAIL_REFRESH_INTERVAL` |
+| `monitoring.serviceability_logs.detail.max_per_cycle` | `SERVICEABILITY_LOG_DETAIL_MAX_PER_CYCLE` |
+| `monitoring.serviceability_logs.detail.concurrency` | `SERVICEABILITY_LOG_DETAIL_CONCURRENCY` |
 | `ddae.base_url` | `DDAE_BASE_URL` |
 | `ddae.source_instance` | `DDAE_SOURCE_INSTANCE` |
 | `server.listen_address` | `EXPORTER_LISTEN_ADDRESS` |
@@ -616,9 +763,14 @@ CA 並維持三個欄位為 `false`。Global flag 為 `true`、target flag 為 `
 | `security.allow_insecure_tls` | `ALLOW_INSECURE_TLS` |
 | `kafka.brokers` | `KAFKA_BROKERS`，以逗號分隔。 |
 | `kafka.topic` | `KAFKA_TOPIC` |
+| `kafka.serviceability_logs_topic` | `KAFKA_SERVICEABILITY_LOG_TOPIC` |
 | `kafka.tls.ca_file` | `KAFKA_CA_FILE` |
 | `kafka.tls.insecure_skip_verify` | `KAFKA_TLS_INSECURE_SKIP_VERIFY` |
 | `state.dir` | `STATE_DIR` |
+| `state.serviceability_logs_outbox_max_bytes` | `SERVICEABILITY_LOG_OUTBOX_MAX_BYTES` |
+| `state.serviceability_logs_outbox_max_events` | `SERVICEABILITY_LOG_OUTBOX_MAX_EVENTS` |
+| `state.serviceability_logs_checkpoint_retention` | `SERVICEABILITY_LOG_CHECKPOINT_RETENTION` |
+| `state.serviceability_logs_checkpoint_max_records` | `SERVICEABILITY_LOG_CHECKPOINT_MAX_RECORDS` |
 | `logging.level` | `LOG_LEVEL` |
 | `logging.format` | `LOG_FORMAT` |
 
@@ -674,8 +826,8 @@ docker run --rm \
   ddae-exporter:local --config /etc/ddae-exporter/config.yaml
 ```
 
-Resource-only 模式使用 DDAE config、credentials 與 trust mounts；dual 與 alert-only
-模式再使用 Kafka secrets 與 persistent state mount。
+Resource-only 模式使用 DDAE config、credentials 與 trust mounts；alerts 或
+Serviceability Logs 啟用時再使用 Kafka secrets 與 persistent state mount。
 
 ## Kubernetes 安裝
 
@@ -684,7 +836,7 @@ Repository 提供的 manifest：
 | File | 內容 |
 |---|---|
 | [`deploy/kubernetes/configmap.yaml`](deploy/kubernetes/configmap.yaml) | 非敏感 YAML 設定範例。 |
-| [`deploy/kubernetes/deployment.yaml`](deploy/kubernetes/deployment.yaml) | ServiceAccount、2 GiB RWO PVC、單 replica `Recreate` Deployment 與 ClusterIP Service。 |
+| [`deploy/kubernetes/deployment.yaml`](deploy/kubernetes/deployment.yaml) | ServiceAccount、3 GiB RWO PVC、單 replica `Recreate` Deployment 與 ClusterIP Service。 |
 | [`deploy/kubernetes/networkpolicy.yaml`](deploy/kubernetes/networkpolicy.yaml) | Default-deny ingress/egress policy。 |
 
 ### 1. 準備部署值
@@ -841,6 +993,8 @@ scrape_configs:
 | Resource | `ddae_up`、`ddae_collector_success`、`ddae_snapshot_age_seconds`。 |
 | Alert | `ddae_alert_list_complete`、`ddae_alert_pipeline_ready`、`ddae_alert_detail_deferred`。 |
 | Kafka | `ddae_kafka_publish_success`、`ddae_kafka_buffered_events`、`ddae_kafka_events_failed_total`。 |
+| Serviceability Logs | `ddae_serviceability_log_list_complete`、`ddae_serviceability_log_pipeline_ready`、`ddae_serviceability_log_detail_deferred`。 |
+| Logs Kafka | `ddae_serviceability_log_kafka_publish_success`、`ddae_serviceability_log_buffered_records`、`ddae_serviceability_log_records_failed_total`。 |
 
 ## 啟動後確認
 
@@ -854,8 +1008,9 @@ curl --silent http://127.0.0.1:9469/metrics
 |---|---|
 | `/healthz` | HTTP server 啟動後回 `200`。 |
 | `/readyz` | 已啟用 pipeline 完成首次準備後回 `200`。 |
-| `/metrics` | 包含 `ddae_build_info`、兩筆 `ddae_monitoring_enabled`，以及已啟用 pipeline 的 metrics。 |
-| Kafka | 產生測試 alert 後，topic 收到 schema `1.0` event，consumer 可依 key upsert。 |
+| `/metrics` | 包含 `ddae_build_info`、三筆固定 `ddae_monitoring_enabled`，以及已啟用 pipeline 的 metrics。 |
+| Alert Kafka | 產生測試 alert 後，alert topic 收到 schema `1.0` event，consumer 可依 key upsert。 |
+| Logs Kafka | 啟用 pipeline 並產生新或變更 log 後，專用 topic 收到 `ddae.serviceability_log.upsert`。 |
 
 詳細維運、incident、outbox recovery 與 rollback 步驟見
 [`docs/runbook.md`](docs/runbook.md)。
@@ -872,8 +1027,9 @@ curl --silent http://127.0.0.1:9469/metrics
 | CI policy | `./scripts/stage-ci-policy.sh` |
 | Supply-chain artifacts | `./scripts/supply-chain.sh` |
 
-目前 repository 的本機基準結果為 lint、race-enabled tests、build 與 CI policy 通過，
-coverage 為 81.1%，高於 80% gate。
+目前 repository 的本機基準結果為 lint、race-enabled tests、build、security 與 CI
+policy 通過，coverage 為 81.2%，高於 80% gate；source-reachable vulnerability scan
+結果為 `No vulnerabilities found`。
 
 ## 專案文件
 

@@ -51,6 +51,10 @@ func TestLoadDefaultsAndSecrets(t *testing.T) {
 	if cfg.ListenAddress != "127.0.0.1:9469" || cfg.AlertDetailConcurrency != 4 {
 		t.Fatalf("defaults not applied: %#v", cfg)
 	}
+	if cfg.ServiceabilityLogMonitoringEnabled || cfg.KafkaServiceabilityLogTopic != "ddae-serviceability-logs" ||
+		cfg.ServiceabilityLogDetailConcurrency != 4 || cfg.ServiceabilityLogListResponseMaxBytes != 8*1024*1024 {
+		t.Fatalf("serviceability defaults not applied: %#v", cfg)
+	}
 }
 
 func TestSecretFileRemovesOneLineEnding(t *testing.T) {
@@ -95,5 +99,47 @@ func TestRejectsUnsafeBaseURLAndTiming(t *testing.T) {
 				t.Fatal("expected validation error")
 			}
 		})
+	}
+}
+
+func TestResponseBodyLimitsAcceptInclusiveBoundariesAndRejectOverflow(t *testing.T) {
+	for _, name := range []string{"DDAE_RESPONSE_MAX_BYTES", "ALERT_LIST_RESPONSE_MAX_BYTES", "ALERT_DETAIL_RESPONSE_MAX_BYTES", "SERVICEABILITY_LOG_LIST_RESPONSE_MAX_BYTES", "SERVICEABILITY_LOG_DETAIL_RESPONSE_MAX_BYTES"} {
+		for _, value := range []string{"1", "4194304", "67108864"} {
+			env := validEnvironment()
+			env[name] = value
+			if _, err := loadMap(env, nil); err != nil {
+				t.Fatalf("%s=%s rejected: %v", name, value, err)
+			}
+		}
+		for _, value := range []string{"67108865", "9223372036854775807"} {
+			env := validEnvironment()
+			env[name] = value
+			if _, err := loadMap(env, nil); err == nil {
+				t.Fatalf("%s=%s accepted", name, value)
+			}
+		}
+	}
+}
+
+func TestServiceabilityLogOnlyConfigurationAndIsolationValidation(t *testing.T) {
+	env := validEnvironment()
+	env["DDAE_RESOURCE_MONITORING_ENABLED"] = "false"
+	env["DDAE_ALERT_MONITORING_ENABLED"] = "false"
+	env["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"] = "true"
+	env["KAFKA_SERVICEABILITY_LOG_TOPIC"] = "ddae-logs"
+	delete(env, "KAFKA_TOPIC")
+	cfg, err := loadMap(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ServiceabilityLogMonitoringEnabled || cfg.AlertMonitoringEnabled || cfg.KafkaServiceabilityLogTopic != "ddae-logs" {
+		t.Fatalf("log-only config = %#v", cfg)
+	}
+
+	env = validEnvironment()
+	env["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"] = "true"
+	env["KAFKA_SERVICEABILITY_LOG_TOPIC"] = env["KAFKA_TOPIC"]
+	if _, err := loadMap(env, nil); err == nil {
+		t.Fatal("shared alert/log topic was accepted")
 	}
 }

@@ -48,6 +48,29 @@ func TestProducerConfigurationIsBoundedAndTLSValidated(t *testing.T) {
 	}
 }
 
+func TestServiceabilityLogProducerUsesDedicatedTopicAndKindHeader(t *testing.T) {
+	cfg := config.Config{
+		KafkaBrokers: []string{"127.0.0.1:1"}, KafkaTopic: "alerts",
+		KafkaServiceabilityLogTopic: "serviceability-logs", KafkaClientID: "test",
+		KafkaPublishTimeout: time.Second,
+	}
+	producer, err := NewServiceabilityLogProducer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer producer.Close()
+	if producer.topic != "serviceability-logs" {
+		t.Fatalf("topic = %q", producer.topic)
+	}
+	headers := recordHeaders("serviceability_log")
+	if len(headers) != 3 || headers[2].Key != "ddae-record-kind" || string(headers[2].Value) != "serviceability_log" {
+		t.Fatalf("headers = %#v", headers)
+	}
+	if len(recordHeaders("")) != 2 {
+		t.Fatal("existing alert header contract changed")
+	}
+}
+
 func TestPublisherFailurePathsKeepRecordsAndBoundLogs(t *testing.T) {
 	for name, store := range map[string]*fakeOutbox{
 		"records": {recordsErr: errors.New("state-canary")},

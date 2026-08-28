@@ -1,14 +1,23 @@
 version: 1
 
 monitoring:
-  # Both pipelines default to true; at least one must remain enabled. In a
-  # site-specific resource-only unit, remove the Kafka credential override.
+  # Resources and alerts default to true; Serviceability Logs defaults to
+  # false. At least one pipeline must remain enabled.
   resources:
     enabled: true
     interval: 30s
     stale_after: 120s
   alerts:
     enabled: true
+    interval: 30s
+    list_response_max_bytes: 8388608
+    detail:
+      response_max_bytes: 1048576
+      refresh_interval: 10m
+      max_per_cycle: 200
+      concurrency: 4
+  serviceability_logs:
+    enabled: false
     interval: 30s
     list_response_max_bytes: 8388608
     detail:
@@ -49,6 +58,7 @@ kafka:
   brokers:
     - kafka.example.invalid:9093
   topic: ddae-serviceability-alerts
+  serviceability_logs_topic: ddae-serviceability-logs
   client_id: ddae-exporter
   tls:
     ca_file: /etc/ddae-exporter/trust/kafka-ca.pem
@@ -67,6 +77,10 @@ state:
   outbox_max_events: 100000
   checkpoint_retention: 720h
   checkpoint_max_alerts: 100000
+  serviceability_logs_outbox_max_bytes: 1073741824
+  serviceability_logs_outbox_max_events: 100000
+  serviceability_logs_checkpoint_retention: 720h
+  serviceability_logs_checkpoint_max_records: 100000
 
 logging:
   level: info

@@ -13,9 +13,12 @@ import (
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/config"
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/ddae"
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/kafka"
+	"github.com/crispkid/dell-ddae-metrics-exporter/internal/logpublisher"
+	"github.com/crispkid/dell-ddae-metrics-exporter/internal/logstate"
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/metrics"
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/outbox"
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/server"
+	"github.com/crispkid/dell-ddae-metrics-exporter/internal/serviceability"
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/snapshot"
 )
 
@@ -39,21 +42,26 @@ type clientCloser interface{ CloseIdleConnections() }
 type stateCloser interface{ Close() error }
 
 type App struct {
-	config    config.Config
-	logger    *slog.Logger
-	ddae      clientCloser
-	producer  producerCloser
-	outbox    stateCloser
-	server    httpServer
-	manager   worker
-	alerts    worker
-	publisher worker
+	config       config.Config
+	logger       *slog.Logger
+	ddae         clientCloser
+	producer     producerCloser
+	outbox       stateCloser
+	server       httpServer
+	manager      worker
+	alerts       worker
+	publisher    worker
+	logProducer  producerCloser
+	logOutbox    stateCloser
+	logs         worker
+	logPublisher worker
 }
 
 func New(cfg config.Config, logger *slog.Logger, build BuildInfo) (*App, error) {
 	resourcesEnabled := cfg.ResourceMonitoringEnabled
 	alertsEnabled := cfg.AlertMonitoringEnabled
-	if !resourcesEnabled && !alertsEnabled {
+	logsEnabled := cfg.ServiceabilityLogMonitoringEnabled
+	if !resourcesEnabled && !alertsEnabled && !logsEnabled {
 		return nil, errors.New("at least one monitoring pipeline must be enabled")
 	}
 	resourceInterval := cfg.ResourceCollectionInterval
@@ -88,10 +96,42 @@ func New(cfg config.Config, logger *slog.Logger, build BuildInfo) (*App, error) 
 			return nil, err
 		}
 	}
+	var logStore *logstate.Store
+	var logProducer *kafka.Producer
+	if logsEnabled {
+		logStore, err = logstate.Open(logstate.Options{
+			StateDir: cfg.StateDir, MaxBytes: cfg.ServiceabilityLogOutboxMaxBytes,
+			MaxEvents:      cfg.ServiceabilityLogOutboxMaxEvents,
+			MaxCheckpoints: cfg.ServiceabilityLogCheckpointMaxRecords,
+			Retention:      cfg.ServiceabilityLogCheckpointRetention,
+		})
+		if err != nil {
+			if producer != nil {
+				producer.Close()
+			}
+			if store != nil {
+				_ = store.Close()
+			}
+			ddaeClient.CloseIdleConnections()
+			return nil, err
+		}
+		logProducer, err = kafka.NewServiceabilityLogProducer(cfg)
+		if err != nil {
+			_ = logStore.Close()
+			if producer != nil {
+				producer.Close()
+			}
+			if store != nil {
+				_ = store.Close()
+			}
+			ddaeClient.CloseIdleConnections()
+			return nil, err
+		}
+	}
 	registry, err := metrics.NewRegistry(
 		state, cfg.StaleAfter,
 		metrics.BuildInfo{Version: build.Version, GoVersion: runtime.Version()},
-		metrics.PipelineMode{ResourcesEnabled: resourcesEnabled, AlertsEnabled: alertsEnabled},
+		metrics.PipelineMode{ResourcesEnabled: resourcesEnabled, AlertsEnabled: alertsEnabled, ServiceabilityLogsEnabled: logsEnabled},
 	)
 	if err != nil {
 		if producer != nil {
@@ -99,6 +139,12 @@ func New(cfg config.Config, logger *slog.Logger, build BuildInfo) (*App, error) 
 		}
 		if store != nil {
 			_ = store.Close()
+		}
+		if logProducer != nil {
+			logProducer.Close()
+		}
+		if logStore != nil {
+			_ = logStore.Close()
 		}
 		ddaeClient.CloseIdleConnections()
 		return nil, err
@@ -117,24 +163,44 @@ func New(cfg config.Config, logger *slog.Logger, build BuildInfo) (*App, error) 
 		}, logger)
 		publisher = kafka.NewPublisher(producer, store, state, logger)
 	}
+	var logPipeline worker
+	var serviceabilityLogPublisher worker
+	if logsEnabled {
+		logPipeline = serviceability.NewPipeline(ddaeClient, logStore, state, serviceability.Options{
+			SourceInstance: cfg.SourceInstance, Interval: cfg.ServiceabilityLogCollectionInterval,
+			CycleTimeout: cfg.CycleTimeout, RefreshInterval: cfg.ServiceabilityLogDetailRefreshInterval,
+			MaxPerCycle: cfg.ServiceabilityLogDetailMaxPerCycle,
+			Concurrency: cfg.ServiceabilityLogDetailConcurrency,
+		}, logger)
+		serviceabilityLogPublisher = logpublisher.New(logProducer, logStore, state, logger)
+	}
 	httpServer := server.New(
 		cfg.ListenAddress, registry, state, cfg.StaleAfter,
-		server.PipelineMode{ResourcesEnabled: resourcesEnabled, AlertsEnabled: alertsEnabled},
+		server.PipelineMode{ResourcesEnabled: resourcesEnabled, AlertsEnabled: alertsEnabled, ServiceabilityLogsEnabled: logsEnabled},
 	)
 	application := &App{
 		config: cfg, logger: logger, ddae: ddaeClient,
 		server: httpServer, manager: manager, alerts: alertPipeline,
 		publisher: publisher,
+		logs:      logPipeline, logPublisher: serviceabilityLogPublisher,
 	}
 	// Avoid storing typed nil pointers in interface fields. A typed nil interface
 	// compares non-nil and would make resource-only shutdown call absent resources.
 	application.producer = nil
 	application.outbox = nil
+	application.logProducer = nil
+	application.logOutbox = nil
 	if producer != nil {
 		application.producer = producer
 	}
 	if store != nil {
 		application.outbox = store
+	}
+	if logProducer != nil {
+		application.logProducer = logProducer
+	}
+	if logStore != nil {
+		application.logOutbox = logStore
 	}
 	return application, nil
 }
@@ -142,8 +208,8 @@ func New(cfg config.Config, logger *slog.Logger, build BuildInfo) (*App, error) 
 func (a *App) Run(ctx context.Context) error {
 	workerContext, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
-	activeWorkers := make([]worker, 0, 3)
-	for _, candidate := range []worker{a.manager, a.alerts, a.publisher} {
+	activeWorkers := make([]worker, 0, 5)
+	for _, candidate := range []worker{a.manager, a.alerts, a.publisher, a.logs, a.logPublisher} {
 		if candidate != nil {
 			activeWorkers = append(activeWorkers, candidate)
 		}
@@ -191,9 +257,17 @@ func (a *App) Run(ctx context.Context) error {
 	if a.producer != nil {
 		a.producer.Close()
 	}
+	if a.logProducer != nil {
+		a.logProducer.Close()
+	}
 	a.ddae.CloseIdleConnections()
 	if a.outbox != nil {
 		if err := a.outbox.Close(); err != nil && runErr == nil {
+			runErr = err
+		}
+	}
+	if a.logOutbox != nil {
+		if err := a.logOutbox.Close(); err != nil && runErr == nil {
 			runErr = err
 		}
 	}

@@ -12,16 +12,18 @@ import (
 )
 
 type Server struct {
-	http             *http.Server
-	state            *snapshot.Store
-	staleAfter       time.Duration
-	resourcesEnabled bool
-	alertsEnabled    bool
+	http                      *http.Server
+	state                     *snapshot.Store
+	staleAfter                time.Duration
+	resourcesEnabled          bool
+	alertsEnabled             bool
+	serviceabilityLogsEnabled bool
 }
 
 type PipelineMode struct {
-	ResourcesEnabled bool
-	AlertsEnabled    bool
+	ResourcesEnabled          bool
+	AlertsEnabled             bool
+	ServiceabilityLogsEnabled bool
 }
 
 func New(address string, registry prometheus.Gatherer, state *snapshot.Store, staleAfter time.Duration, modes ...PipelineMode) *Server {
@@ -33,8 +35,13 @@ func New(address string, registry prometheus.Gatherer, state *snapshot.Store, st
 	server := &Server{
 		state: state, staleAfter: staleAfter,
 		resourcesEnabled: mode.ResourcesEnabled, alertsEnabled: mode.AlertsEnabled,
+		serviceabilityLogsEnabled: mode.ServiceabilityLogsEnabled,
 	}
-	mux.Handle("/metrics", getOnly(promhttp.HandlerFor(registry, promhttp.HandlerOpts{EnableOpenMetrics: true})))
+	mux.Handle("/metrics", getOnly(promhttp.HandlerFor(registry, promhttp.HandlerOpts{
+		EnableOpenMetrics:   true,
+		MaxRequestsInFlight: 5,
+		Timeout:             9 * time.Second,
+	})))
 	mux.HandleFunc("/healthz", func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			writer.WriteHeader(http.StatusMethodNotAllowed)
@@ -50,7 +57,7 @@ func New(address string, registry prometheus.Gatherer, state *snapshot.Store, st
 			return
 		}
 		writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		if !state.ReadyFor(time.Now(), staleAfter, server.resourcesEnabled, server.alertsEnabled) {
+		if !state.ReadyFor(time.Now(), staleAfter, server.resourcesEnabled, server.alertsEnabled, server.serviceabilityLogsEnabled) {
 			writer.WriteHeader(http.StatusServiceUnavailable)
 			_, _ = writer.Write([]byte("not ready\n"))
 			return

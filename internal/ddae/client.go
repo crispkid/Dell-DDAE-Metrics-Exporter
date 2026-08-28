@@ -1,6 +1,7 @@
 package ddae
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -14,13 +15,16 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/config"
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/observability"
 )
 
 const (
-	tokenBodyLimit = 64 * 1024
+	tokenBodyLimit         = 64 * 1024
+	maxResponseBodyBytes   = 64 * 1024 * 1024
+	maxResponseHeaderBytes = 1024 * 1024
 )
 
 type Error struct {
@@ -39,14 +43,16 @@ func (e *Error) Error() string {
 func (e *Error) FailureClass() observability.Class { return e.class }
 
 type Client struct {
-	baseURL        *url.URL
-	httpClient     *http.Client
-	tokens         *tokenManager
-	requestTimeout time.Duration
-	responseLimit  int64
-	listLimit      int64
-	detailLimit    int64
-	retryMax       int
+	baseURL                      *url.URL
+	httpClient                   *http.Client
+	tokens                       *tokenManager
+	requestTimeout               time.Duration
+	responseLimit                int64
+	listLimit                    int64
+	detailLimit                  int64
+	serviceabilityLogListLimit   int64
+	serviceabilityLogDetailLimit int64
+	retryMax                     int
 }
 
 func NewClient(cfg config.Config) (*Client, error) {
@@ -61,15 +67,16 @@ func NewClient(cfg config.Config) (*Client, error) {
 		return nil, err
 	}
 	transport := &http.Transport{
-		Proxy:                 nil,
-		TLSClientConfig:       tlsConfig,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          32,
-		MaxIdleConnsPerHost:   16,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   cfg.RequestTimeout,
-		ResponseHeaderTimeout: cfg.RequestTimeout,
-		ExpectContinueTimeout: time.Second,
+		Proxy:                  nil,
+		TLSClientConfig:        tlsConfig,
+		ForceAttemptHTTP2:      true,
+		MaxIdleConns:           32,
+		MaxIdleConnsPerHost:    16,
+		IdleConnTimeout:        90 * time.Second,
+		TLSHandshakeTimeout:    cfg.RequestTimeout,
+		ResponseHeaderTimeout:  cfg.RequestTimeout,
+		ExpectContinueTimeout:  time.Second,
+		MaxResponseHeaderBytes: maxResponseHeaderBytes,
 	}
 	httpClient := &http.Client{
 		Transport: transport,
@@ -84,16 +91,19 @@ func NewClient(cfg config.Config) (*Client, error) {
 		username:       cfg.DDAEUsername,
 		password:       cfg.DDAEPassword,
 		clientSecret:   cfg.DDAEClientSecret,
+		retryMax:       cfg.RetryMax,
 	}
 	return &Client{
-		baseURL:        cloneURL(cfg.DDAEBaseURL),
-		httpClient:     httpClient,
-		tokens:         tokens,
-		requestTimeout: cfg.RequestTimeout,
-		responseLimit:  cfg.ResponseMaxBytes,
-		listLimit:      cfg.AlertListResponseMaxBytes,
-		detailLimit:    cfg.AlertDetailResponseMaxBytes,
-		retryMax:       cfg.RetryMax,
+		baseURL:                      cloneURL(cfg.DDAEBaseURL),
+		httpClient:                   httpClient,
+		tokens:                       tokens,
+		requestTimeout:               cfg.RequestTimeout,
+		responseLimit:                cfg.ResponseMaxBytes,
+		listLimit:                    cfg.AlertListResponseMaxBytes,
+		detailLimit:                  cfg.AlertDetailResponseMaxBytes,
+		serviceabilityLogListLimit:   cfg.ServiceabilityLogListResponseMaxBytes,
+		serviceabilityLogDetailLimit: cfg.ServiceabilityLogDetailResponseMaxBytes,
+		retryMax:                     cfg.RetryMax,
 	}, nil
 }
 
@@ -174,19 +184,39 @@ func (c *Client) AlertDetail(ctx context.Context, id string) (AlertDetail, error
 	return result, err
 }
 
+func (c *Client) ServiceabilityLogList(ctx context.Context) (ServiceabilityLogList, error) {
+	var result ServiceabilityLogList
+	err := c.getJSON(ctx, "serviceability_log_list", serviceabilityLogListPath, c.serviceabilityLogListLimit, &result)
+	return result, err
+}
+
+func (c *Client) ServiceabilityLogDetail(ctx context.Context, id string) (ServiceabilityLogDetail, error) {
+	if err := ValidateServiceabilityLogID(id); err != nil {
+		return ServiceabilityLogDetail{}, err
+	}
+	var result ServiceabilityLogDetail
+	err := c.getJSONRawPath(ctx, "serviceability_log_detail", serviceabilityLogDetailPath+id,
+		serviceabilityLogDetailPath+url.PathEscape(id), c.serviceabilityLogDetailLimit, &result)
+	return result, err
+}
+
 func (c *Client) getJSON(ctx context.Context, operation, path string, limit int64, destination any) error {
-	token, err := c.tokens.get(ctx, false)
+	return c.getJSONRawPath(ctx, operation, path, "", limit, destination)
+}
+
+func (c *Client) getJSONRawPath(ctx context.Context, operation, path, rawPath string, limit int64, destination any) error {
+	lease, err := c.tokens.get(ctx, 0)
 	if err != nil {
 		return err
 	}
 	authRetried := false
 	for attempt := 0; attempt <= c.retryMax; attempt++ {
-		status, err := c.doGET(ctx, operation, path, token, limit, destination)
+		status, err := c.doGET(ctx, operation, path, rawPath, lease.token, limit, destination)
 		if status == http.StatusUnauthorized {
 			if authRetried {
 				return &Error{class: observability.ClassAuth, op: operation, status: status}
 			}
-			token, err = c.tokens.get(ctx, true)
+			lease, err = c.tokens.get(ctx, lease.generation)
 			if err != nil {
 				return err
 			}
@@ -207,11 +237,12 @@ func (c *Client) getJSON(ctx context.Context, operation, path string, limit int6
 	return &Error{class: observability.ClassInternal, op: operation}
 }
 
-func (c *Client) doGET(ctx context.Context, operation, path, token string, limit int64, destination any) (int, error) {
+func (c *Client) doGET(ctx context.Context, operation, path, rawPath, token string, limit int64, destination any) (int, error) {
 	requestContext, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 	target := cloneURL(c.baseURL)
 	target.Path = path
+	target.RawPath = rawPath
 	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, target.String(), nil)
 	if err != nil {
 		return 0, &Error{class: observability.ClassInternal, op: operation}
@@ -239,13 +270,19 @@ func (c *Client) doGET(ctx context.Context, operation, path, token string, limit
 }
 
 func decodeBounded(reader io.Reader, limit int64, destination any) error {
-	limited := &io.LimitedReader{R: reader, N: limit + 1}
-	decoder := json.NewDecoder(limited)
-	if err := decoder.Decode(destination); err != nil {
+	if limit < 1 || limit > maxResponseBodyBytes {
+		return errors.New("invalid response limit")
+	}
+	data, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
 		return err
 	}
-	if limited.N <= 0 {
+	if int64(len(data)) > limit {
 		return errors.New("response exceeds limit")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(destination); err != nil {
+		return err
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
@@ -296,6 +333,13 @@ func ValidateAlertID(id string) error {
 		if !valid {
 			return &Error{class: observability.ClassValidation, op: "alert_detail_id"}
 		}
+	}
+	return nil
+}
+
+func ValidateServiceabilityLogID(id string) error {
+	if len(id) < 1 || len(id) > 256 || !utf8.ValidString(id) || id == "." || id == ".." || strings.ContainsRune(id, '\x00') {
+		return &Error{class: observability.ClassValidation, op: "serviceability_log_detail_id"}
 	}
 	return nil
 }

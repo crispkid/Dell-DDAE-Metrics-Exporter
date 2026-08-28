@@ -33,7 +33,15 @@ func NewProducer(cfg config.Config) (*Producer, error) {
 	return newProducer(cfg)
 }
 
+func NewServiceabilityLogProducer(cfg config.Config) (*Producer, error) {
+	return newProducerForTopic(cfg, cfg.KafkaServiceabilityLogTopic)
+}
+
 func newProducer(cfg config.Config, extraOptions ...kgo.Opt) (*Producer, error) {
+	return newProducerForTopic(cfg, cfg.KafkaTopic, extraOptions...)
+}
+
+func newProducerForTopic(cfg config.Config, topic string, extraOptions ...kgo.Opt) (*Producer, error) {
 	if cfg.KafkaTLSInsecureSkipVerify && !cfg.AllowInsecureTLS {
 		return nil, errors.New("Kafka insecure TLS requires the global acknowledgement")
 	}
@@ -75,7 +83,7 @@ func newProducer(cfg config.Config, extraOptions ...kgo.Opt) (*Producer, error) 
 	if err != nil {
 		return nil, Error{class: observability.ClassKafkaRejected}
 	}
-	return &Producer{client: client, topic: cfg.KafkaTopic, timeout: cfg.KafkaPublishTimeout}, nil
+	return &Producer{client: client, topic: topic, timeout: cfg.KafkaPublishTimeout}, nil
 }
 
 func producerTLSConfig(cfg config.Config) (*tls.Config, error) {
@@ -105,21 +113,38 @@ func producerTLSConfig(cfg config.Config) (*tls.Config, error) {
 }
 
 func (p *Producer) Publish(ctx context.Context, record outbox.Record) error {
+	return p.publish(ctx, record.RecordKey, record.Payload, "")
+}
+
+func (p *Producer) PublishServiceabilityLog(ctx context.Context, key, payload []byte) error {
+	return p.publish(ctx, key, payload, "serviceability_log")
+}
+
+func (p *Producer) publish(ctx context.Context, key, payload []byte, recordKind string) error {
 	publishContext, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
+	headers := recordHeaders(recordKind)
 	result := p.client.ProduceSync(publishContext, &kgo.Record{
-		Topic: p.topic,
-		Key:   append([]byte(nil), record.RecordKey...),
-		Value: append([]byte(nil), record.Payload...),
-		Headers: []kgo.RecordHeader{
-			{Key: "content-type", Value: []byte("application/json")},
-			{Key: "ddae-schema-version", Value: []byte("1.0")},
-		},
+		Topic:   p.topic,
+		Key:     append([]byte(nil), key...),
+		Value:   append([]byte(nil), payload...),
+		Headers: headers,
 	})
 	if err := result.FirstErr(); err != nil {
 		return Error{class: publishFailureClass(err, publishContext)}
 	}
 	return nil
+}
+
+func recordHeaders(recordKind string) []kgo.RecordHeader {
+	headers := []kgo.RecordHeader{
+		{Key: "content-type", Value: []byte("application/json")},
+		{Key: "ddae-schema-version", Value: []byte("1.0")},
+	}
+	if recordKind != "" {
+		headers = append(headers, kgo.RecordHeader{Key: "ddae-record-kind", Value: []byte(recordKind)})
+	}
+	return headers
 }
 
 func publishFailureClass(err error, ctx context.Context) observability.Class {
@@ -144,9 +169,10 @@ type Publisher struct {
 	producer interface {
 		Publish(context.Context, outbox.Record) error
 	}
-	outbox      Outbox
-	diagnostics *snapshot.Store
-	logger      interface{ Error(string, ...any) }
+	outbox                Outbox
+	diagnostics           *snapshot.Store
+	logger                interface{ Error(string, ...any) }
+	stateRecoveryRequired bool
 }
 
 func NewPublisher(producer interface {
@@ -172,33 +198,61 @@ func (p *Publisher) Run(ctx context.Context) {
 func (p *Publisher) flush(ctx context.Context) {
 	records, err := p.outbox.Records(100)
 	if err != nil {
+		p.stateRecoveryRequired = true
+		p.diagnostics.SetAlertPublisherStateHealthy(false)
 		p.failed(err, 0)
 		return
 	}
 	if len(records) == 0 {
-		events, _, healthErr := p.outbox.Health()
+		events, full, healthErr := p.outbox.Health()
 		if healthErr != nil {
+			p.stateRecoveryRequired = true
+			p.diagnostics.SetAlertPublisherStateHealthy(false)
 			p.failed(healthErr, events)
 			return
 		}
 		p.diagnostics.SetKafkaBuffered(events)
+		p.diagnostics.SetAlertStateFull(full)
+		p.diagnostics.SetAlertPublisherStateHealthy(true)
+		p.stateRecoveryRequired = false
 		return
 	}
 	for _, record := range records {
 		started := time.Now()
 		if err := p.producer.Publish(ctx, record); err != nil {
-			events, _, _ := p.outbox.Health()
+			events, full, healthErr := p.outbox.Health()
+			if healthErr != nil {
+				p.stateRecoveryRequired = true
+				p.diagnostics.SetAlertPublisherStateHealthy(false)
+				p.failed(healthErr, events)
+				return
+			}
+			p.diagnostics.SetAlertStateFull(full)
+			if !p.stateRecoveryRequired {
+				p.diagnostics.SetAlertPublisherStateHealthy(true)
+			}
 			p.diagnostics.RecordKafkaPublish(false, time.Since(started), 0, observability.Classify(err), events)
 			p.log(err)
 			return
 		}
 		if err := p.outbox.Acknowledge(record.Sequence); err != nil {
+			p.stateRecoveryRequired = true
+			p.diagnostics.SetAlertPublisherStateHealthy(false)
 			p.failed(err, len(records))
 			return
 		}
-		events, _, _ := p.outbox.Health()
+		events, full, healthErr := p.outbox.Health()
+		if healthErr != nil {
+			p.stateRecoveryRequired = true
+			p.diagnostics.SetAlertPublisherStateHealthy(false)
+			p.failed(healthErr, events)
+			return
+		}
+		p.diagnostics.SetAlertStateFull(full)
 		p.diagnostics.RecordKafkaPublish(true, time.Since(started), 1, "", events)
 	}
+	p.diagnostics.SetAlertPublisherStateHealthy(true)
+	p.stateRecoveryRequired = false
 }
 
 func (p *Publisher) failed(err error, buffered int) {

@@ -7,7 +7,7 @@ import (
 	"github.com/crispkid/dell-ddae-metrics-exporter/internal/observability"
 )
 
-var CollectorNames = []string{"ping", "clusters", "nodes", "lock", "power", "alert_list", "alert_detail"}
+var CollectorNames = []string{"ping", "clusters", "nodes", "lock", "power", "alert_list", "alert_detail", "serviceability_log_list", "serviceability_log_detail"}
 
 type OptionalFloat struct {
 	Value float64
@@ -54,21 +54,37 @@ type CollectorStatus struct {
 }
 
 type View struct {
-	Ping                 Family[bool]
-	Clusters             Family[[]Cluster]
-	Nodes                Family[[]Node]
-	Lock                 Family[bool]
-	Power                Family[Power]
-	LastCompleteAt       time.Time
-	Collectors           map[string]CollectorStatus
-	AlertListComplete    bool
-	AlertPipelineReady   bool
-	AlertDeferred        int
-	KafkaPublishSuccess  bool
-	KafkaPublishDuration time.Duration
-	KafkaPublishedTotal  uint64
-	KafkaFailedTotal     map[observability.Class]uint64
-	KafkaBuffered        int
+	Ping                              Family[bool]
+	Clusters                          Family[[]Cluster]
+	Nodes                             Family[[]Node]
+	Lock                              Family[bool]
+	Power                             Family[Power]
+	LastCompleteAt                    time.Time
+	Collectors                        map[string]CollectorStatus
+	AlertListComplete                 bool
+	AlertPipelineReady                bool
+	AlertCollectionReady              bool
+	AlertPipelineStateOK              bool
+	AlertPublisherStateOK             bool
+	AlertStateFull                    bool
+	AlertDeferred                     int
+	KafkaPublishSuccess               bool
+	KafkaPublishDuration              time.Duration
+	KafkaPublishedTotal               uint64
+	KafkaFailedTotal                  map[observability.Class]uint64
+	KafkaBuffered                     int
+	ServiceabilityLogListComplete     bool
+	ServiceabilityLogPipelineReady    bool
+	ServiceabilityLogCollectionReady  bool
+	ServiceabilityLogPipelineStateOK  bool
+	ServiceabilityLogPublisherStateOK bool
+	ServiceabilityLogStateFull        bool
+	ServiceabilityLogDeferred         int
+	ServiceabilityLogPublishSuccess   bool
+	ServiceabilityLogPublishDuration  time.Duration
+	ServiceabilityLogPublishedTotal   uint64
+	ServiceabilityLogFailedTotal      map[observability.Class]uint64
+	ServiceabilityLogBuffered         int
 }
 
 type Store struct {
@@ -82,8 +98,9 @@ func NewStore() *Store {
 		statuses[name] = CollectorStatus{}
 	}
 	return &Store{view: View{
-		Collectors:       statuses,
-		KafkaFailedTotal: make(map[observability.Class]uint64),
+		Collectors:                   statuses,
+		KafkaFailedTotal:             make(map[observability.Class]uint64),
+		ServiceabilityLogFailedTotal: make(map[observability.Class]uint64),
 	}}
 }
 
@@ -157,8 +174,47 @@ func (s *Store) RecordAlertDetail(success bool, duration time.Duration, deferred
 
 func (s *Store) SetAlertPipelineReady(ready bool) {
 	s.mu.Lock()
-	s.view.AlertPipelineReady = ready
+	// This compatibility helper represents a fully evaluated alert pipeline.
+	// Runtime owners use the component-specific setters below.
+	s.view.AlertCollectionReady = ready
+	s.view.AlertPipelineStateOK = ready
+	s.view.AlertPublisherStateOK = ready
+	s.view.AlertStateFull = false
+	s.recomputeAlertReadyLocked()
 	s.mu.Unlock()
+}
+
+func (s *Store) SetAlertCollectionReady(ready bool) {
+	s.mu.Lock()
+	s.view.AlertCollectionReady = ready
+	s.recomputeAlertReadyLocked()
+	s.mu.Unlock()
+}
+
+func (s *Store) SetAlertPipelineStateHealthy(healthy bool) {
+	s.mu.Lock()
+	s.view.AlertPipelineStateOK = healthy
+	s.recomputeAlertReadyLocked()
+	s.mu.Unlock()
+}
+
+func (s *Store) SetAlertPublisherStateHealthy(healthy bool) {
+	s.mu.Lock()
+	s.view.AlertPublisherStateOK = healthy
+	s.recomputeAlertReadyLocked()
+	s.mu.Unlock()
+}
+
+func (s *Store) SetAlertStateFull(full bool) {
+	s.mu.Lock()
+	s.view.AlertStateFull = full
+	s.recomputeAlertReadyLocked()
+	s.mu.Unlock()
+}
+
+func (s *Store) recomputeAlertReadyLocked() {
+	s.view.AlertPipelineReady = s.view.AlertCollectionReady && s.view.AlertPipelineStateOK &&
+		s.view.AlertPublisherStateOK && !s.view.AlertStateFull
 }
 
 func (s *Store) RecordKafkaPublish(success bool, duration time.Duration, acknowledged int, failure observability.Class, buffered int) {
@@ -181,6 +237,74 @@ func (s *Store) SetKafkaBuffered(buffered int) {
 	s.mu.Unlock()
 }
 
+func (s *Store) RecordServiceabilityLogList(success, complete bool, duration time.Duration) {
+	s.mu.Lock()
+	s.view.Collectors["serviceability_log_list"] = CollectorStatus{Success: success, Duration: duration}
+	s.view.ServiceabilityLogListComplete = success && complete
+	s.mu.Unlock()
+}
+
+func (s *Store) RecordServiceabilityLogDetail(success bool, duration time.Duration, deferred int) {
+	s.mu.Lock()
+	s.view.Collectors["serviceability_log_detail"] = CollectorStatus{Success: success, Duration: duration}
+	s.view.ServiceabilityLogDeferred = deferred
+	s.mu.Unlock()
+}
+
+func (s *Store) SetServiceabilityLogCollectionReady(ready bool) {
+	s.mu.Lock()
+	s.view.ServiceabilityLogCollectionReady = ready
+	s.recomputeServiceabilityLogReadyLocked()
+	s.mu.Unlock()
+}
+
+func (s *Store) SetServiceabilityLogPipelineStateHealthy(healthy bool) {
+	s.mu.Lock()
+	s.view.ServiceabilityLogPipelineStateOK = healthy
+	s.recomputeServiceabilityLogReadyLocked()
+	s.mu.Unlock()
+}
+
+func (s *Store) SetServiceabilityLogPublisherStateHealthy(healthy bool) {
+	s.mu.Lock()
+	s.view.ServiceabilityLogPublisherStateOK = healthy
+	s.recomputeServiceabilityLogReadyLocked()
+	s.mu.Unlock()
+}
+
+func (s *Store) SetServiceabilityLogStateFull(full bool) {
+	s.mu.Lock()
+	s.view.ServiceabilityLogStateFull = full
+	s.recomputeServiceabilityLogReadyLocked()
+	s.mu.Unlock()
+}
+
+func (s *Store) recomputeServiceabilityLogReadyLocked() {
+	s.view.ServiceabilityLogPipelineReady = s.view.ServiceabilityLogCollectionReady &&
+		s.view.ServiceabilityLogPipelineStateOK && s.view.ServiceabilityLogPublisherStateOK &&
+		!s.view.ServiceabilityLogStateFull
+}
+
+func (s *Store) RecordServiceabilityLogPublish(success bool, duration time.Duration, acknowledged int, failure observability.Class, buffered int) {
+	s.mu.Lock()
+	s.view.ServiceabilityLogPublishSuccess = success
+	s.view.ServiceabilityLogPublishDuration = duration
+	if acknowledged > 0 {
+		s.view.ServiceabilityLogPublishedTotal += uint64(acknowledged)
+	}
+	if failure != "" {
+		s.view.ServiceabilityLogFailedTotal[failure]++
+	}
+	s.view.ServiceabilityLogBuffered = buffered
+	s.mu.Unlock()
+}
+
+func (s *Store) SetServiceabilityLogBuffered(buffered int) {
+	s.mu.Lock()
+	s.view.ServiceabilityLogBuffered = buffered
+	s.mu.Unlock()
+}
+
 func (s *Store) Load() View {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -195,6 +319,10 @@ func (s *Store) Load() View {
 	for key, value := range s.view.KafkaFailedTotal {
 		result.KafkaFailedTotal[key] = value
 	}
+	result.ServiceabilityLogFailedTotal = make(map[observability.Class]uint64, len(s.view.ServiceabilityLogFailedTotal))
+	for key, value := range s.view.ServiceabilityLogFailedTotal {
+		result.ServiceabilityLogFailedTotal[key] = value
+	}
 	return result
 }
 
@@ -202,15 +330,19 @@ func (s *Store) Ready(now time.Time, staleAfter time.Duration) bool {
 	return s.ReadyFor(now, staleAfter, true, true)
 }
 
-func (s *Store) ReadyFor(now time.Time, staleAfter time.Duration, resourcesEnabled, alertsEnabled bool) bool {
+func (s *Store) ReadyFor(now time.Time, staleAfter time.Duration, resourcesEnabled, alertsEnabled bool, serviceabilityLogsEnabled ...bool) bool {
 	view := s.Load()
-	if !resourcesEnabled && !alertsEnabled {
+	logsEnabled := len(serviceabilityLogsEnabled) > 0 && serviceabilityLogsEnabled[0]
+	if !resourcesEnabled && !alertsEnabled && !logsEnabled {
 		return false
 	}
 	if resourcesEnabled && !requiredCurrent(view, now, staleAfter) {
 		return false
 	}
 	if alertsEnabled && !view.AlertPipelineReady {
+		return false
+	}
+	if logsEnabled && !view.ServiceabilityLogPipelineReady {
 		return false
 	}
 	return true

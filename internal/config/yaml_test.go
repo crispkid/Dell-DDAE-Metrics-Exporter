@@ -100,10 +100,71 @@ state:
 	}
 }
 
+func TestYAMLLoadsServiceabilityLogOnlyConfiguration(t *testing.T) {
+	document := `version: 1
+monitoring:
+  resources:
+    enabled: false
+  alerts:
+    enabled: false
+  serviceability_logs:
+    enabled: true
+    interval: 30s
+    list_response_max_bytes: 8388608
+    detail:
+      response_max_bytes: 1048576
+      refresh_interval: 10m
+      max_per_cycle: 200
+      concurrency: 4
+ddae:
+  base_url: https://ddae.example.test
+  source_instance: site-a
+  credentials:
+    username_file: /secrets/username
+    password_file: /secrets/password
+    client_secret_file: /secrets/client-secret
+kafka:
+  brokers: [kafka.example.test:9093]
+  serviceability_logs_topic: ddae-serviceability-logs
+state:
+  dir: /var/lib/ddae-exporter
+  serviceability_logs_outbox_max_bytes: 1073741824
+  serviceability_logs_outbox_max_events: 100000
+  serviceability_logs_checkpoint_retention: 720h
+  serviceability_logs_checkpoint_max_records: 100000
+`
+	cfg, err := loadYAMLMap(document, nil, testSecrets())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ResourceMonitoringEnabled || cfg.AlertMonitoringEnabled || !cfg.ServiceabilityLogMonitoringEnabled || cfg.KafkaTopic != "" || cfg.KafkaServiceabilityLogTopic != "ddae-serviceability-logs" {
+		t.Fatalf("log-only YAML = %#v", cfg)
+	}
+}
+
 func TestYAMLRejectsBothPipelinesDisabled(t *testing.T) {
 	document := strings.Replace(resourceOnlyYAML(), "enabled: true", "enabled: false", 1)
 	if _, err := loadYAMLMap(document, nil, testSecrets()); err == nil {
 		t.Fatal("both-disabled YAML was accepted")
+	}
+}
+
+func TestYAMLResponseBodyLimitsEnforce64MiBCeiling(t *testing.T) {
+	for _, value := range []string{"1", "67108864"} {
+		document := strings.Replace(resourceOnlyYAML(), "  alerts:\n    enabled: false\n", "  alerts:\n    enabled: false\n    list_response_max_bytes: "+value+"\n    detail:\n      response_max_bytes: "+value+"\n", 1)
+		document = strings.Replace(document, "ddae:\n", "ddae:\n  response_max_bytes: "+value+"\n", 1)
+		document = strings.Replace(document, "ddae:\n", "  serviceability_logs:\n    enabled: false\n    list_response_max_bytes: "+value+"\n    detail:\n      response_max_bytes: "+value+"\nddae:\n", 1)
+		if _, err := loadYAMLMap(document, nil, testSecrets()); err != nil {
+			t.Fatalf("YAML response_max_bytes=%s rejected: %v", value, err)
+		}
+	}
+	for _, value := range []string{"67108865", "9223372036854775807"} {
+		document := strings.Replace(resourceOnlyYAML(), "  alerts:\n    enabled: false\n", "  alerts:\n    enabled: false\n    list_response_max_bytes: "+value+"\n    detail:\n      response_max_bytes: "+value+"\n", 1)
+		document = strings.Replace(document, "ddae:\n", "ddae:\n  response_max_bytes: "+value+"\n", 1)
+		document = strings.Replace(document, "ddae:\n", "  serviceability_logs:\n    enabled: false\n    list_response_max_bytes: "+value+"\n    detail:\n      response_max_bytes: "+value+"\nddae:\n", 1)
+		if _, err := loadYAMLMap(document, nil, testSecrets()); err == nil {
+			t.Fatalf("YAML response_max_bytes=%s accepted", value)
+		}
 	}
 }
 
@@ -164,5 +225,49 @@ func TestYAMLFileBoundAndUTF8(t *testing.T) {
 	}
 	if _, err := readYAMLFile(directory); err == nil {
 		t.Fatal("directory configuration was accepted")
+	}
+}
+
+func TestCommittedSystemdExampleUsesStrictYAMLSchema(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "deploy", "systemd", "config.example.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := decodeYAML(data)
+	if err != nil {
+		t.Fatalf("committed systemd example: %v", err)
+	}
+	for key, want := range map[string]string{
+		"DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED": "false",
+		"KAFKA_SERVICEABILITY_LOG_TOPIC":             "ddae-serviceability-logs",
+		"SERVICEABILITY_LOG_OUTBOX_MAX_EVENTS":       "100000",
+	} {
+		if values[key] != want {
+			t.Fatalf("%s = %q, want %q", key, values[key], want)
+		}
+	}
+}
+
+func TestREADMEFullYAMLExampleUsesStrictSchema(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const marker = "```yaml\nversion: 1 # 設定格式版本"
+	start := strings.Index(string(data), marker)
+	if start < 0 {
+		t.Fatal("README full YAML example start is missing")
+	}
+	start += len("```yaml\n")
+	end := strings.Index(string(data[start:]), "\n```")
+	if end < 0 {
+		t.Fatal("README full YAML example end is missing")
+	}
+	values, err := decodeYAML(data[start : start+end])
+	if err != nil {
+		t.Fatalf("README full YAML example: %v", err)
+	}
+	if values["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"] != "false" {
+		t.Fatalf("README serviceability log mode = %q", values["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"])
 	}
 }

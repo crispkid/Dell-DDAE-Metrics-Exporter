@@ -1,14 +1,16 @@
 package ddae
 
 const (
-	pingPath        = "/rest/v1/ping"
-	clustersPath    = "/rest/v1/ddae-clusters"
-	nodesPath       = "/rest/v1/infrastructure-nodes"
-	lockPath        = "/rest/v1/system-lock"
-	powerPath       = "/rest/v1/system-shutdown"
-	alertListPath   = "/rest/v1/serviceability-issues"
-	alertDetailPath = "/rest/v1/serviceability-issues/"
-	tokenPath       = "/auth/realms/ddae/protocol/openid-connect/token"
+	pingPath                    = "/rest/v1/ping"
+	clustersPath                = "/rest/v1/ddae-clusters"
+	nodesPath                   = "/rest/v1/infrastructure-nodes"
+	lockPath                    = "/rest/v1/system-lock"
+	powerPath                   = "/rest/v1/system-shutdown"
+	alertListPath               = "/rest/v1/serviceability-issues"
+	alertDetailPath             = "/rest/v1/serviceability-issues/"
+	serviceabilityLogListPath   = "/rest/v1/serviceability-events"
+	serviceabilityLogDetailPath = "/rest/v1/serviceability-events/"
+	tokenPath                   = "/auth/realms/ddae/protocol/openid-connect/token"
 )
 
 type Operation struct {
@@ -25,6 +27,8 @@ var approvedOperations = [...]Operation{
 	{Collector: "power", Method: "GET", Path: powerPath},
 	{Collector: "alert_list", Method: "GET", Path: alertListPath},
 	{Collector: "alert_detail", Method: "GET", Path: alertDetailPath + "{id}"},
+	{Collector: "serviceability_log_list", Method: "GET", Path: serviceabilityLogListPath},
+	{Collector: "serviceability_log_detail", Method: "GET", Path: serviceabilityLogDetailPath + "{id}"},
 }
 
 func ApprovedOperations() []Operation {

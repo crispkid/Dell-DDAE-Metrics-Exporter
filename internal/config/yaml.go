@@ -25,8 +25,9 @@ type yamlConfig struct {
 }
 
 type yamlMonitoring struct {
-	Resources yamlResources `yaml:"resources"`
-	Alerts    yamlAlerts    `yaml:"alerts"`
+	Resources          yamlResources          `yaml:"resources"`
+	Alerts             yamlAlerts             `yaml:"alerts"`
+	ServiceabilityLogs yamlServiceabilityLogs `yaml:"serviceability_logs"`
 }
 
 type yamlResources struct {
@@ -43,6 +44,20 @@ type yamlAlerts struct {
 }
 
 type yamlAlertDetail struct {
+	ResponseMaxBytes *int64  `yaml:"response_max_bytes"`
+	RefreshInterval  *string `yaml:"refresh_interval"`
+	MaxPerCycle      *int    `yaml:"max_per_cycle"`
+	Concurrency      *int    `yaml:"concurrency"`
+}
+
+type yamlServiceabilityLogs struct {
+	Enabled              *bool                       `yaml:"enabled"`
+	Interval             *string                     `yaml:"interval"`
+	ListResponseMaxBytes *int64                      `yaml:"list_response_max_bytes"`
+	Detail               yamlServiceabilityLogDetail `yaml:"detail"`
+}
+
+type yamlServiceabilityLogDetail struct {
 	ResponseMaxBytes *int64  `yaml:"response_max_bytes"`
 	RefreshInterval  *string `yaml:"refresh_interval"`
 	MaxPerCycle      *int    `yaml:"max_per_cycle"`
@@ -88,12 +103,13 @@ type yamlKafkaTLS struct {
 }
 
 type yamlKafka struct {
-	Brokers        []string     `yaml:"brokers"`
-	Topic          *string      `yaml:"topic"`
-	ClientID       *string      `yaml:"client_id"`
-	TLS            yamlKafkaTLS `yaml:"tls"`
-	SASL           yamlSASL     `yaml:"sasl"`
-	PublishTimeout *string      `yaml:"publish_timeout"`
+	Brokers                 []string     `yaml:"brokers"`
+	Topic                   *string      `yaml:"topic"`
+	ServiceabilityLogsTopic *string      `yaml:"serviceability_logs_topic"`
+	ClientID                *string      `yaml:"client_id"`
+	TLS                     yamlKafkaTLS `yaml:"tls"`
+	SASL                    yamlSASL     `yaml:"sasl"`
+	PublishTimeout          *string      `yaml:"publish_timeout"`
 }
 
 type yamlSASL struct {
@@ -103,11 +119,15 @@ type yamlSASL struct {
 }
 
 type yamlState struct {
-	Dir                 *string `yaml:"dir"`
-	OutboxMaxBytes      *int64  `yaml:"outbox_max_bytes"`
-	OutboxMaxEvents     *int    `yaml:"outbox_max_events"`
-	CheckpointRetention *string `yaml:"checkpoint_retention"`
-	CheckpointMaxAlerts *int    `yaml:"checkpoint_max_alerts"`
+	Dir                                    *string `yaml:"dir"`
+	OutboxMaxBytes                         *int64  `yaml:"outbox_max_bytes"`
+	OutboxMaxEvents                        *int    `yaml:"outbox_max_events"`
+	CheckpointRetention                    *string `yaml:"checkpoint_retention"`
+	CheckpointMaxAlerts                    *int    `yaml:"checkpoint_max_alerts"`
+	ServiceabilityLogsOutboxMaxBytes       *int64  `yaml:"serviceability_logs_outbox_max_bytes"`
+	ServiceabilityLogsOutboxMaxEvents      *int    `yaml:"serviceability_logs_outbox_max_events"`
+	ServiceabilityLogsCheckpointRetention  *string `yaml:"serviceability_logs_checkpoint_retention"`
+	ServiceabilityLogsCheckpointMaxRecords *int    `yaml:"serviceability_logs_checkpoint_max_records"`
 }
 
 type yamlLogging struct {
@@ -253,6 +273,13 @@ func (document yamlConfig) environmentValues() map[string]string {
 	putString(values, "ALERT_DETAIL_REFRESH_INTERVAL", document.Monitoring.Alerts.Detail.RefreshInterval)
 	putInt(values, "ALERT_DETAIL_MAX_PER_CYCLE", document.Monitoring.Alerts.Detail.MaxPerCycle)
 	putInt(values, "ALERT_DETAIL_CONCURRENCY", document.Monitoring.Alerts.Detail.Concurrency)
+	putBool(values, "DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED", document.Monitoring.ServiceabilityLogs.Enabled)
+	putString(values, "DDAE_SERVICEABILITY_LOG_COLLECTION_INTERVAL", document.Monitoring.ServiceabilityLogs.Interval)
+	putInt64(values, "SERVICEABILITY_LOG_LIST_RESPONSE_MAX_BYTES", document.Monitoring.ServiceabilityLogs.ListResponseMaxBytes)
+	putInt64(values, "SERVICEABILITY_LOG_DETAIL_RESPONSE_MAX_BYTES", document.Monitoring.ServiceabilityLogs.Detail.ResponseMaxBytes)
+	putString(values, "SERVICEABILITY_LOG_DETAIL_REFRESH_INTERVAL", document.Monitoring.ServiceabilityLogs.Detail.RefreshInterval)
+	putInt(values, "SERVICEABILITY_LOG_DETAIL_MAX_PER_CYCLE", document.Monitoring.ServiceabilityLogs.Detail.MaxPerCycle)
+	putInt(values, "SERVICEABILITY_LOG_DETAIL_CONCURRENCY", document.Monitoring.ServiceabilityLogs.Detail.Concurrency)
 
 	putString(values, "EXPORTER_LISTEN_ADDRESS", document.Server.ListenAddress)
 	putString(values, "SHUTDOWN_GRACE_PERIOD", document.Server.ShutdownGracePeriod)
@@ -274,6 +301,7 @@ func (document yamlConfig) environmentValues() map[string]string {
 		values["KAFKA_BROKERS"] = strings.Join(document.Kafka.Brokers, ",")
 	}
 	putString(values, "KAFKA_TOPIC", document.Kafka.Topic)
+	putString(values, "KAFKA_SERVICEABILITY_LOG_TOPIC", document.Kafka.ServiceabilityLogsTopic)
 	putString(values, "KAFKA_CLIENT_ID", document.Kafka.ClientID)
 	putString(values, "KAFKA_CA_FILE", document.Kafka.TLS.CAFile)
 	putString(values, "KAFKA_CLIENT_CERT_FILE", document.Kafka.TLS.ClientCertFile)
@@ -289,6 +317,10 @@ func (document yamlConfig) environmentValues() map[string]string {
 	putInt(values, "KAFKA_OUTBOX_MAX_EVENTS", document.State.OutboxMaxEvents)
 	putString(values, "CHECKPOINT_RETENTION", document.State.CheckpointRetention)
 	putInt(values, "CHECKPOINT_MAX_ALERTS", document.State.CheckpointMaxAlerts)
+	putInt64(values, "SERVICEABILITY_LOG_OUTBOX_MAX_BYTES", document.State.ServiceabilityLogsOutboxMaxBytes)
+	putInt(values, "SERVICEABILITY_LOG_OUTBOX_MAX_EVENTS", document.State.ServiceabilityLogsOutboxMaxEvents)
+	putString(values, "SERVICEABILITY_LOG_CHECKPOINT_RETENTION", document.State.ServiceabilityLogsCheckpointRetention)
+	putInt(values, "SERVICEABILITY_LOG_CHECKPOINT_MAX_RECORDS", document.State.ServiceabilityLogsCheckpointMaxRecords)
 	putString(values, "LOG_LEVEL", document.Logging.Level)
 	putString(values, "LOG_FORMAT", document.Logging.Format)
 	return values

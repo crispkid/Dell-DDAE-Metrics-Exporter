@@ -20,6 +20,36 @@ if ! rg -q 'kgo\.AllowIdempotentProduceCancellation\(\)' internal/kafka/producer
   printf 'security failed: Kafka producer must permit cancellation of uncertain in-flight idempotent produce requests\n' >&2
   exit 1
 fi
+if ! rg -q 'maxResponseBodyBytes[[:space:]]*=[[:space:]]*64 \* 1024 \* 1024' internal/ddae/client.go ||
+  ! rg -q 'maxResponseHeaderBytes[[:space:]]*=[[:space:]]*1024 \* 1024' internal/ddae/client.go ||
+  ! rg -q 'MaxResponseHeaderBytes:[[:space:]]*maxResponseHeaderBytes' internal/ddae/client.go; then
+  printf 'security failed: DDAE body/header response ceilings differ from the approved bounds\n' >&2
+  exit 1
+fi
+if ! rg -q 'MaxRequestsInFlight:[[:space:]]*5' internal/server/server.go ||
+  ! rg -q 'Timeout:[[:space:]]*9 \* time\.Second' internal/server/server.go; then
+  printf 'security failed: Prometheus handler concurrency/timeout differs from the approved bounds\n' >&2
+  exit 1
+fi
+if ! rg -q 'serviceabilityLogListPath[[:space:]]*=[[:space:]]*"/rest/v1/serviceability-events"' internal/ddae/allowlist.go ||
+  ! rg -q 'serviceabilityLogDetailPath[[:space:]]*=[[:space:]]*"/rest/v1/serviceability-events/"' internal/ddae/allowlist.go ||
+  ! rg -q 'filepath\.Join\(options\.StateDir, "serviceability-logs\.db"\)' internal/logstate/store.go ||
+  ! rg -q 'PublishServiceabilityLog' internal/kafka/producer.go ||
+  ! rg -q '"serviceability_log"' internal/kafka/producer.go ||
+  ! rg -q 'Key: "ddae-record-kind"' internal/kafka/producer.go; then
+  printf 'security failed: Serviceability Logs route/state/record-kind isolation differs from the approved contract\n' >&2
+  exit 1
+fi
+if rg -n 'descLabels\("ddae_serviceability_log_[^"]+"[^\n]*(log_id|message|resource|topic|endpoint|timestamp)' internal/metrics --glob '*.go'; then
+  printf 'security failed: Serviceability Log content entered a Prometheus label contract\n' >&2
+  exit 1
+fi
+serviceability_reason_labels="$(rg -n 'descLabels\("ddae_serviceability_log_[^"]+"[^\n]*"reason"' internal/metrics --glob '*.go' || true)"
+if [[ "$(printf '%s\n' "$serviceability_reason_labels" | sed '/^$/d' | wc -l | tr -d ' ')" != "1" ]] ||
+  ! printf '%s\n' "$serviceability_reason_labels" | rg -q 'ddae_serviceability_log_records_failed_total'; then
+  printf 'security failed: Serviceability Log reason label differs from the single fixed failure-class contract\n' >&2
+  exit 1
+fi
 
 go vet ./...
 go test \
@@ -30,6 +60,9 @@ go test \
   ./internal/kafka \
   ./internal/observability \
   ./internal/alerts \
+  ./internal/serviceability \
+  ./internal/logstate \
+  ./internal/logpublisher \
   -run 'YAML|Secret|TLS|Insecure|Warn|Allowlist|Mutation|Redact|DetailPath|Sensitive'
 
 if rg -n 'ProxyFromEnvironment|http\.Method(Patch|Put|Delete)' internal/ddae --glob '*.go' --glob '!*_test.go'; then

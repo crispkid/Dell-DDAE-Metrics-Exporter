@@ -7,14 +7,23 @@ data:
     version: 1
 
     monitoring:
-      # Set one pipeline false when operating in a single-pipeline mode. Both
-      # false is invalid; remove unused Kafka/state mounts in site overlays.
+      # Resources and alerts default to true; Serviceability Logs defaults to
+      # false. Keep at least one pipeline enabled.
       resources:
         enabled: true
         interval: 30s
         stale_after: 120s
       alerts:
         enabled: true
+        interval: 30s
+        list_response_max_bytes: 8388608
+        detail:
+          response_max_bytes: 1048576
+          refresh_interval: 10m
+          max_per_cycle: 200
+          concurrency: 4
+      serviceability_logs:
+        enabled: false
         interval: 30s
         list_response_max_bytes: 8388608
         detail:
@@ -50,6 +59,7 @@ data:
       brokers:
         - kafka.example.invalid:9093
       topic: ddae-serviceability-alerts
+      serviceability_logs_topic: ddae-serviceability-logs
       client_id: ddae-exporter
       tls:
         ca_file: /run/trust/kafka-ca.pem
@@ -67,6 +77,10 @@ data:
       outbox_max_events: 100000
       checkpoint_retention: 720h
       checkpoint_max_alerts: 100000
+      serviceability_logs_outbox_max_bytes: 1073741824
+      serviceability_logs_outbox_max_events: 100000
+      serviceability_logs_checkpoint_retention: 720h
+      serviceability_logs_checkpoint_max_records: 100000
 
     logging:
       level: info

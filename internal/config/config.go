@@ -13,7 +13,10 @@ import (
 	"unicode/utf8"
 )
 
-const secretFileMaxBytes = 64 * 1024
+const (
+	secretFileMaxBytes = 64 * 1024
+	responseMaxBytes   = 64 * 1024 * 1024
+)
 
 // Secret deliberately has no String or marshaling methods. Callers must opt in
 // to reading the value at the narrow trust boundary that consumes it.
@@ -25,52 +28,64 @@ func (s Secret) Value() string { return s.value }
 func (s Secret) Empty() bool   { return s.value == "" }
 
 type Config struct {
-	ResourceMonitoringEnabled  bool
-	AlertMonitoringEnabled     bool
-	ResourceCollectionInterval time.Duration
-	AlertCollectionInterval    time.Duration
-	DDAEBaseURL                *url.URL
-	SourceInstance             string
-	DDAEUsername               Secret
-	DDAEPassword               Secret
-	DDAEClientSecret           Secret
-	DDAECAFile                 string
-	DDAETLSInsecureSkipVerify  bool
-	AllowInsecureTLS           bool
-	ListenAddress              string
-	CollectionInterval         time.Duration // Legacy alias for the resource interval.
-	RequestTimeout             time.Duration
-	CycleTimeout               time.Duration
-	ResponseMaxBytes           int64
-	RetryMax                   int
-	StaleAfter                 time.Duration
+	ResourceMonitoringEnabled           bool
+	AlertMonitoringEnabled              bool
+	ServiceabilityLogMonitoringEnabled  bool
+	ResourceCollectionInterval          time.Duration
+	AlertCollectionInterval             time.Duration
+	ServiceabilityLogCollectionInterval time.Duration
+	DDAEBaseURL                         *url.URL
+	SourceInstance                      string
+	DDAEUsername                        Secret
+	DDAEPassword                        Secret
+	DDAEClientSecret                    Secret
+	DDAECAFile                          string
+	DDAETLSInsecureSkipVerify           bool
+	AllowInsecureTLS                    bool
+	ListenAddress                       string
+	CollectionInterval                  time.Duration // Legacy alias for the resource interval.
+	RequestTimeout                      time.Duration
+	CycleTimeout                        time.Duration
+	ResponseMaxBytes                    int64
+	RetryMax                            int
+	StaleAfter                          time.Duration
 
-	AlertListResponseMaxBytes   int64
-	AlertDetailResponseMaxBytes int64
-	AlertDetailRefreshInterval  time.Duration
-	AlertDetailMaxPerCycle      int
-	AlertDetailConcurrency      int
+	AlertListResponseMaxBytes               int64
+	AlertDetailResponseMaxBytes             int64
+	AlertDetailRefreshInterval              time.Duration
+	AlertDetailMaxPerCycle                  int
+	AlertDetailConcurrency                  int
+	ServiceabilityLogListResponseMaxBytes   int64
+	ServiceabilityLogDetailResponseMaxBytes int64
+	ServiceabilityLogDetailRefreshInterval  time.Duration
+	ServiceabilityLogDetailMaxPerCycle      int
+	ServiceabilityLogDetailConcurrency      int
 
-	KafkaBrokers               []string
-	KafkaTopic                 string
-	KafkaClientID              string
-	KafkaCAFile                string
-	KafkaClientCertFile        string
-	KafkaClientKeyFile         string
-	KafkaTLSInsecureSkipVerify bool
-	KafkaSASLMechanism         string
-	KafkaSASLUsername          Secret
-	KafkaSASLPassword          Secret
-	KafkaPublishTimeout        time.Duration
+	KafkaBrokers                []string
+	KafkaTopic                  string
+	KafkaServiceabilityLogTopic string
+	KafkaClientID               string
+	KafkaCAFile                 string
+	KafkaClientCertFile         string
+	KafkaClientKeyFile          string
+	KafkaTLSInsecureSkipVerify  bool
+	KafkaSASLMechanism          string
+	KafkaSASLUsername           Secret
+	KafkaSASLPassword           Secret
+	KafkaPublishTimeout         time.Duration
 
-	StateDir             string
-	KafkaOutboxMaxBytes  int64
-	KafkaOutboxMaxEvents int
-	CheckpointRetention  time.Duration
-	CheckpointMaxAlerts  int
-	ShutdownGracePeriod  time.Duration
-	LogLevel             string
-	LogFormat            string
+	StateDir                              string
+	KafkaOutboxMaxBytes                   int64
+	KafkaOutboxMaxEvents                  int
+	CheckpointRetention                   time.Duration
+	CheckpointMaxAlerts                   int
+	ServiceabilityLogOutboxMaxBytes       int64
+	ServiceabilityLogOutboxMaxEvents      int
+	ServiceabilityLogCheckpointRetention  time.Duration
+	ServiceabilityLogCheckpointMaxRecords int
+	ShutdownGracePeriod                   time.Duration
+	LogLevel                              string
+	LogFormat                             string
 }
 
 type lookupFunc func(string) (string, bool)
@@ -83,7 +98,7 @@ func (c Config) InsecureTLSTargets() []string {
 	if c.DDAETLSInsecureSkipVerify {
 		targets = append(targets, "ddae")
 	}
-	if c.AlertMonitoringEnabled && c.KafkaTLSInsecureSkipVerify {
+	if (c.AlertMonitoringEnabled || c.ServiceabilityLogMonitoringEnabled) && c.KafkaTLSInsecureSkipVerify {
 		targets = append(targets, "kafka")
 	}
 	return targets
@@ -103,7 +118,10 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	if cfg.AlertMonitoringEnabled, err = boolean(lookup, "DDAE_ALERT_MONITORING_ENABLED", true); err != nil {
 		return cfg, err
 	}
-	if !cfg.ResourceMonitoringEnabled && !cfg.AlertMonitoringEnabled {
+	if cfg.ServiceabilityLogMonitoringEnabled, err = boolean(lookup, "DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED", false); err != nil {
+		return cfg, err
+	}
+	if !cfg.ResourceMonitoringEnabled && !cfg.AlertMonitoringEnabled && !cfg.ServiceabilityLogMonitoringEnabled {
 		return cfg, errors.New("at least one monitoring pipeline must be enabled")
 	}
 	if cfg.AllowInsecureTLS, err = boolean(lookup, "ALLOW_INSECURE_TLS", false); err != nil {
@@ -133,8 +151,8 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 		if err := validateSourceInstance(cfg.SourceInstance); err != nil {
 			return cfg, fmt.Errorf("DDAE_SOURCE_INSTANCE is invalid: %w", err)
 		}
-	} else if cfg.AlertMonitoringEnabled {
-		return cfg, errors.New("DDAE_SOURCE_INSTANCE is required when alert monitoring is enabled")
+	} else if cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled {
+		return cfg, errors.New("DDAE_SOURCE_INSTANCE is required when alert or serviceability log monitoring is enabled")
 	}
 
 	if cfg.DDAEUsername, err = loadSecret(lookup, readFile, "DDAE_USERNAME", "DDAE_USERNAME_FILE", true); err != nil {
@@ -162,6 +180,9 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	if cfg.AlertCollectionInterval, err = durationAlias(lookup, "DDAE_ALERT_COLLECTION_INTERVAL", "DDAE_COLLECTION_INTERVAL", 30*time.Second); err != nil {
 		return cfg, err
 	}
+	if cfg.ServiceabilityLogCollectionInterval, err = duration(lookup, "DDAE_SERVICEABILITY_LOG_COLLECTION_INTERVAL", 30*time.Second); err != nil {
+		return cfg, err
+	}
 	cfg.CollectionInterval = cfg.ResourceCollectionInterval
 	if cfg.RequestTimeout, err = duration(lookup, "DDAE_REQUEST_TIMEOUT", 5*time.Second); err != nil {
 		return cfg, err
@@ -169,7 +190,7 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	if cfg.CycleTimeout, err = duration(lookup, "DDAE_CYCLE_TIMEOUT", 20*time.Second); err != nil {
 		return cfg, err
 	}
-	if cfg.ResponseMaxBytes, err = positiveInt64(lookup, "DDAE_RESPONSE_MAX_BYTES", 4*1024*1024); err != nil {
+	if cfg.ResponseMaxBytes, err = boundedPositiveInt64(lookup, "DDAE_RESPONSE_MAX_BYTES", 4*1024*1024, responseMaxBytes); err != nil {
 		return cfg, err
 	}
 	if cfg.RetryMax, err = boundedInt(lookup, "DDAE_RETRY_MAX", 2, 0, 10); err != nil {
@@ -187,14 +208,17 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	if cfg.AlertMonitoringEnabled && cfg.CycleTimeout >= cfg.AlertCollectionInterval {
 		return cfg, errors.New("DDAE_CYCLE_TIMEOUT must be less than the alert collection interval")
 	}
+	if cfg.ServiceabilityLogMonitoringEnabled && cfg.CycleTimeout >= cfg.ServiceabilityLogCollectionInterval {
+		return cfg, errors.New("DDAE_CYCLE_TIMEOUT must be less than the serviceability log collection interval")
+	}
 	if cfg.ResourceMonitoringEnabled && cfg.StaleAfter <= cfg.ResourceCollectionInterval {
 		return cfg, errors.New("DDAE_STALE_AFTER must be greater than the resource collection interval")
 	}
 
-	if cfg.AlertListResponseMaxBytes, err = positiveInt64(lookup, "ALERT_LIST_RESPONSE_MAX_BYTES", 8*1024*1024); err != nil {
+	if cfg.AlertListResponseMaxBytes, err = boundedPositiveInt64(lookup, "ALERT_LIST_RESPONSE_MAX_BYTES", 8*1024*1024, responseMaxBytes); err != nil {
 		return cfg, err
 	}
-	if cfg.AlertDetailResponseMaxBytes, err = positiveInt64(lookup, "ALERT_DETAIL_RESPONSE_MAX_BYTES", 1024*1024); err != nil {
+	if cfg.AlertDetailResponseMaxBytes, err = boundedPositiveInt64(lookup, "ALERT_DETAIL_RESPONSE_MAX_BYTES", 1024*1024, responseMaxBytes); err != nil {
 		return cfg, err
 	}
 	if cfg.AlertDetailRefreshInterval, err = duration(lookup, "ALERT_DETAIL_REFRESH_INTERVAL", 10*time.Minute); err != nil {
@@ -212,6 +236,27 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	if cfg.AlertMonitoringEnabled && cfg.AlertDetailRefreshInterval < cfg.AlertCollectionInterval {
 		return cfg, errors.New("ALERT_DETAIL_REFRESH_INTERVAL must not be less than the alert collection interval")
 	}
+	if cfg.ServiceabilityLogListResponseMaxBytes, err = boundedPositiveInt64(lookup, "SERVICEABILITY_LOG_LIST_RESPONSE_MAX_BYTES", 8*1024*1024, responseMaxBytes); err != nil {
+		return cfg, err
+	}
+	if cfg.ServiceabilityLogDetailResponseMaxBytes, err = boundedPositiveInt64(lookup, "SERVICEABILITY_LOG_DETAIL_RESPONSE_MAX_BYTES", 1024*1024, responseMaxBytes); err != nil {
+		return cfg, err
+	}
+	if cfg.ServiceabilityLogDetailRefreshInterval, err = duration(lookup, "SERVICEABILITY_LOG_DETAIL_REFRESH_INTERVAL", 10*time.Minute); err != nil {
+		return cfg, err
+	}
+	if cfg.ServiceabilityLogDetailMaxPerCycle, err = boundedInt(lookup, "SERVICEABILITY_LOG_DETAIL_MAX_PER_CYCLE", 200, 1, 10000); err != nil {
+		return cfg, err
+	}
+	if cfg.ServiceabilityLogDetailConcurrency, err = boundedInt(lookup, "SERVICEABILITY_LOG_DETAIL_CONCURRENCY", 4, 1, 128); err != nil {
+		return cfg, err
+	}
+	if cfg.ServiceabilityLogDetailConcurrency > cfg.ServiceabilityLogDetailMaxPerCycle {
+		return cfg, errors.New("SERVICEABILITY_LOG_DETAIL_CONCURRENCY must not exceed SERVICEABILITY_LOG_DETAIL_MAX_PER_CYCLE")
+	}
+	if cfg.ServiceabilityLogMonitoringEnabled && cfg.ServiceabilityLogDetailRefreshInterval < cfg.ServiceabilityLogCollectionInterval {
+		return cfg, errors.New("SERVICEABILITY_LOG_DETAIL_REFRESH_INTERVAL must not be less than the serviceability log collection interval")
+	}
 
 	if brokers, ok := lookup("KAFKA_BROKERS"); ok {
 		if strings.TrimSpace(brokers) == "" {
@@ -221,8 +266,8 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 		if err != nil {
 			return cfg, fmt.Errorf("KAFKA_BROKERS is invalid: %w", err)
 		}
-	} else if cfg.AlertMonitoringEnabled {
-		return cfg, errors.New("KAFKA_BROKERS is required when alert monitoring is enabled")
+	} else if cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled {
+		return cfg, errors.New("KAFKA_BROKERS is required when alert or serviceability log monitoring is enabled")
 	}
 	if topic, ok := lookup("KAFKA_TOPIC"); ok {
 		cfg.KafkaTopic = topic
@@ -231,6 +276,13 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 		}
 	} else if cfg.AlertMonitoringEnabled {
 		return cfg, errors.New("KAFKA_TOPIC is required when alert monitoring is enabled")
+	}
+	cfg.KafkaServiceabilityLogTopic = optionalText(lookup, "KAFKA_SERVICEABILITY_LOG_TOPIC", "ddae-serviceability-logs")
+	if strings.TrimSpace(cfg.KafkaServiceabilityLogTopic) == "" || strings.ContainsAny(cfg.KafkaServiceabilityLogTopic, "\x00\r\n\t ") || len(cfg.KafkaServiceabilityLogTopic) > 249 {
+		return cfg, errors.New("KAFKA_SERVICEABILITY_LOG_TOPIC is invalid")
+	}
+	if cfg.AlertMonitoringEnabled && cfg.ServiceabilityLogMonitoringEnabled && cfg.KafkaTopic == cfg.KafkaServiceabilityLogTopic {
+		return cfg, errors.New("KAFKA_SERVICEABILITY_LOG_TOPIC must differ from KAFKA_TOPIC")
 	}
 	cfg.KafkaClientID = optionalText(lookup, "KAFKA_CLIENT_ID", "ddae-exporter")
 	if len(cfg.KafkaClientID) == 0 || len(cfg.KafkaClientID) > 128 || strings.ContainsAny(cfg.KafkaClientID, "\x00\r\n") {
@@ -254,7 +306,7 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	default:
 		return cfg, errors.New("KAFKA_SASL_MECHANISM is unsupported")
 	}
-	if cfg.KafkaSASLMechanism != "" && cfg.AlertMonitoringEnabled {
+	if cfg.KafkaSASLMechanism != "" && (cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled) {
 		var username string
 		username, err = requiredText(lookup, "KAFKA_SASL_USERNAME")
 		if err != nil {
@@ -287,6 +339,18 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 		return cfg, err
 	}
 	if cfg.CheckpointMaxAlerts, err = boundedInt(lookup, "CHECKPOINT_MAX_ALERTS", 100000, 1, 10_000_000); err != nil {
+		return cfg, err
+	}
+	if cfg.ServiceabilityLogOutboxMaxBytes, err = positiveInt64(lookup, "SERVICEABILITY_LOG_OUTBOX_MAX_BYTES", 1024*1024*1024); err != nil {
+		return cfg, err
+	}
+	if cfg.ServiceabilityLogOutboxMaxEvents, err = boundedInt(lookup, "SERVICEABILITY_LOG_OUTBOX_MAX_EVENTS", 100000, 1, 10_000_000); err != nil {
+		return cfg, err
+	}
+	if cfg.ServiceabilityLogCheckpointRetention, err = duration(lookup, "SERVICEABILITY_LOG_CHECKPOINT_RETENTION", 720*time.Hour); err != nil {
+		return cfg, err
+	}
+	if cfg.ServiceabilityLogCheckpointMaxRecords, err = boundedInt(lookup, "SERVICEABILITY_LOG_CHECKPOINT_MAX_RECORDS", 100000, 1, 10_000_000); err != nil {
 		return cfg, err
 	}
 	if cfg.ShutdownGracePeriod, err = duration(lookup, "SHUTDOWN_GRACE_PERIOD", 15*time.Second); err != nil {
@@ -451,6 +515,17 @@ func positiveInt64(lookup lookupFunc, name string, fallback int64) (int64, error
 		return 0, fmt.Errorf("%s must be a positive integer", name)
 	}
 	return parsed, nil
+}
+
+func boundedPositiveInt64(lookup lookupFunc, name string, fallback, maximum int64) (int64, error) {
+	value, err := positiveInt64(lookup, name, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if value > maximum {
+		return 0, fmt.Errorf("%s must be between 1 and %d", name, maximum)
+	}
+	return value, nil
 }
 
 func boundedInt(lookup lookupFunc, name string, fallback, minimum, maximum int) (int, error) {
