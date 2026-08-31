@@ -253,7 +253,7 @@ func TestREADMEFullYAMLExampleUsesStrictSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const marker = "```yaml\nversion: 1 # 設定格式版本"
+	const marker = "```yaml\nversion: 1 # Configuration schema version"
 	start := strings.Index(string(data), marker)
 	if start < 0 {
 		t.Fatal("README full YAML example start is missing")

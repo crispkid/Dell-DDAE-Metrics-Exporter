@@ -106,8 +106,8 @@ func TestDDAEPathPrefixDocumentationAndDeploymentContract(t *testing.T) {
 		"ddae.paths.ping_prefix", "ddae.paths.api_prefix",
 		"DDAE_PING_PATH_PREFIX", "DDAE_API_PATH_PREFIX",
 		"GET /ping", "GET /v1/ddae-clusters",
-		"| 保留 v1.0.0-rc2 routes | `/rest/v1` | `/rest/v1` |",
-		"最大 128 bytes", "runtime discovery", "alternate-path",
+		"| Preserve v1.0.0-rc2 routes | `/rest/v1` | `/rest/v1` |",
+		"Maximum length: 128 bytes", "runtime discovery", "alternate-path",
 	} {
 		if !strings.Contains(readme, required) {
 			t.Errorf("README lacks path-prefix contract %q", required)
