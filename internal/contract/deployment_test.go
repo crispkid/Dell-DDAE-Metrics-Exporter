@@ -76,6 +76,7 @@ func TestDeploymentProfilesUseStrictYAMLAndSeparateSecrets(t *testing.T) {
 			"version: 1", "monitoring:", "resources:", "alerts:", "serviceability_logs:",
 			"serviceability_logs_topic: ddae-serviceability-logs",
 			"serviceability_logs_outbox_max_bytes:",
+			"paths:", "ping_prefix: \"\"", "api_prefix: /v1",
 			"allow_insecure_tls: false", "insecure_skip_verify: false",
 		} {
 			if !strings.Contains(content, required) {
@@ -96,5 +97,30 @@ func TestDeploymentProfilesUseStrictYAMLAndSeparateSecrets(t *testing.T) {
 	kubernetes := repositoryFile(t, "deploy", "kubernetes", "deployment.yaml")
 	if strings.Contains(kubernetes, "envFrom:") {
 		t.Fatal("Kubernetes profile still injects non-secret configuration through envFrom")
+	}
+}
+
+func TestDDAEPathPrefixDocumentationAndDeploymentContract(t *testing.T) {
+	readme := repositoryFile(t, "README.md")
+	for _, required := range []string{
+		"ddae.paths.ping_prefix", "ddae.paths.api_prefix",
+		"DDAE_PING_PATH_PREFIX", "DDAE_API_PATH_PREFIX",
+		"GET /ping", "GET /v1/ddae-clusters",
+		"| 保留 v1.0.0-rc2 routes | `/rest/v1` | `/rest/v1` |",
+		"最大 128 bytes", "runtime discovery", "alternate-path",
+	} {
+		if !strings.Contains(readme, required) {
+			t.Errorf("README lacks path-prefix contract %q", required)
+		}
+	}
+	runbook := repositoryFile(t, "docs", "runbook.md")
+	for _, required := range []string{
+		"ddae.paths.ping_prefix", "ddae.paths.api_prefix",
+		"Management API returns 404", "does not probe or retry an alternate namespace",
+		"ping_prefix: /rest/v1", "api_prefix: /rest/v1",
+	} {
+		if !strings.Contains(runbook, required) {
+			t.Errorf("runbook lacks path-prefix contract %q", required)
+		}
 	}
 }

@@ -44,6 +44,7 @@ func (e *Error) FailureClass() observability.Class { return e.class }
 
 type Client struct {
 	baseURL                      *url.URL
+	routes                       routeSet
 	httpClient                   *http.Client
 	tokens                       *tokenManager
 	requestTimeout               time.Duration
@@ -61,6 +62,10 @@ func NewClient(cfg config.Config) (*Client, error) {
 	}
 	if cfg.DDAETLSInsecureSkipVerify && cfg.DDAECAFile != "" {
 		return nil, errors.New("DDAE custom CA conflicts with insecure TLS")
+	}
+	routes, err := routeSetForPrefixes(cfg.DDAEPingPathPrefix, cfg.DDAEAPIPathPrefix)
+	if err != nil {
+		return nil, err
 	}
 	tlsConfig, err := tlsConfig(cfg.DDAECAFile, cfg.DDAETLSInsecureSkipVerify)
 	if err != nil {
@@ -95,6 +100,7 @@ func NewClient(cfg config.Config) (*Client, error) {
 	}
 	return &Client{
 		baseURL:                      cloneURL(cfg.DDAEBaseURL),
+		routes:                       routes,
 		httpClient:                   httpClient,
 		tokens:                       tokens,
 		requestTimeout:               cfg.RequestTimeout,
@@ -133,7 +139,7 @@ func (c *Client) CloseIdleConnections() { c.httpClient.CloseIdleConnections() }
 
 func (c *Client) Ping(ctx context.Context) (PingResponse, error) {
 	var result PingResponse
-	err := c.getJSON(ctx, "ping", pingPath, c.responseLimit, &result)
+	err := c.getJSON(ctx, "ping", c.routes.ping, c.responseLimit, &result)
 	if err == nil && strings.TrimSpace(result.Status) == "" {
 		err = &Error{class: observability.ClassValidation, op: "ping"}
 	}
@@ -142,19 +148,19 @@ func (c *Client) Ping(ctx context.Context) (PingResponse, error) {
 
 func (c *Client) Clusters(ctx context.Context) ([]Cluster, error) {
 	var result []Cluster
-	err := c.getJSON(ctx, "clusters", clustersPath, c.responseLimit, &result)
+	err := c.getJSON(ctx, "clusters", c.routes.clusters, c.responseLimit, &result)
 	return result, err
 }
 
 func (c *Client) Nodes(ctx context.Context) ([]InfrastructureNode, error) {
 	var result []InfrastructureNode
-	err := c.getJSON(ctx, "nodes", nodesPath, c.responseLimit, &result)
+	err := c.getJSON(ctx, "nodes", c.routes.nodes, c.responseLimit, &result)
 	return result, err
 }
 
 func (c *Client) Lock(ctx context.Context) (LockResponse, error) {
 	var result LockResponse
-	err := c.getJSON(ctx, "lock", lockPath, c.responseLimit, &result)
+	err := c.getJSON(ctx, "lock", c.routes.lock, c.responseLimit, &result)
 	if err == nil {
 		if _, ok := result.Status.Value(); !ok {
 			err = &Error{class: observability.ClassValidation, op: "lock"}
@@ -165,13 +171,13 @@ func (c *Client) Lock(ctx context.Context) (LockResponse, error) {
 
 func (c *Client) Power(ctx context.Context) (PowerResponse, error) {
 	var result PowerResponse
-	err := c.getJSON(ctx, "power", powerPath, c.responseLimit, &result)
+	err := c.getJSON(ctx, "power", c.routes.power, c.responseLimit, &result)
 	return result, err
 }
 
 func (c *Client) AlertList(ctx context.Context) (AlertList, error) {
 	var result AlertList
-	err := c.getJSON(ctx, "alert_list", alertListPath, c.listLimit, &result)
+	err := c.getJSON(ctx, "alert_list", c.routes.alertList, c.listLimit, &result)
 	return result, err
 }
 
@@ -180,13 +186,13 @@ func (c *Client) AlertDetail(ctx context.Context, id string) (AlertDetail, error
 		return AlertDetail{}, err
 	}
 	var result AlertDetail
-	err := c.getJSON(ctx, "alert_detail", alertDetailPath+url.PathEscape(id), c.detailLimit, &result)
+	err := c.getJSON(ctx, "alert_detail", c.routes.alertDetail+url.PathEscape(id), c.detailLimit, &result)
 	return result, err
 }
 
 func (c *Client) ServiceabilityLogList(ctx context.Context) (ServiceabilityLogList, error) {
 	var result ServiceabilityLogList
-	err := c.getJSON(ctx, "serviceability_log_list", serviceabilityLogListPath, c.serviceabilityLogListLimit, &result)
+	err := c.getJSON(ctx, "serviceability_log_list", c.routes.serviceabilityLogList, c.serviceabilityLogListLimit, &result)
 	return result, err
 }
 
@@ -195,8 +201,8 @@ func (c *Client) ServiceabilityLogDetail(ctx context.Context, id string) (Servic
 		return ServiceabilityLogDetail{}, err
 	}
 	var result ServiceabilityLogDetail
-	err := c.getJSONRawPath(ctx, "serviceability_log_detail", serviceabilityLogDetailPath+id,
-		serviceabilityLogDetailPath+url.PathEscape(id), c.serviceabilityLogDetailLimit, &result)
+	err := c.getJSONRawPath(ctx, "serviceability_log_detail", c.routes.serviceabilityLogDetail+id,
+		c.routes.serviceabilityLogDetail+url.PathEscape(id), c.serviceabilityLogDetailLimit, &result)
 	return result, err
 }
 

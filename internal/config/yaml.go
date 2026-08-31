@@ -75,6 +75,7 @@ type yamlSecurity struct {
 
 type yamlDDAE struct {
 	BaseURL          *string         `yaml:"base_url"`
+	Paths            yamlDDAEPaths   `yaml:"paths"`
 	SourceInstance   *string         `yaml:"source_instance"`
 	Credentials      yamlCredentials `yaml:"credentials"`
 	TLS              yamlDDAETLS     `yaml:"tls"`
@@ -82,6 +83,21 @@ type yamlDDAE struct {
 	CycleTimeout     *string         `yaml:"cycle_timeout"`
 	ResponseMaxBytes *int64          `yaml:"response_max_bytes"`
 	RetryMax         *int            `yaml:"retry_max"`
+}
+
+type yamlDDAEPaths struct {
+	PingPrefix *yamlPathPrefix `yaml:"ping_prefix"`
+	APIPrefix  *yamlPathPrefix `yaml:"api_prefix"`
+}
+
+type yamlPathPrefix string
+
+func (value *yamlPathPrefix) UnmarshalYAML(node *yaml.Node) error {
+	if node == nil || node.Kind != yaml.ScalarNode || node.Tag != "!!str" {
+		return fmt.Errorf("DDAE path prefix must be a string")
+	}
+	*value = yamlPathPrefix(node.Value)
+	return nil
 }
 
 type yamlCredentials struct {
@@ -286,6 +302,8 @@ func (document yamlConfig) environmentValues() map[string]string {
 	putBool(values, "ALLOW_INSECURE_TLS", document.Security.AllowInsecureTLS)
 
 	putString(values, "DDAE_BASE_URL", document.DDAE.BaseURL)
+	putPathPrefix(values, "DDAE_PING_PATH_PREFIX", document.DDAE.Paths.PingPrefix)
+	putPathPrefix(values, "DDAE_API_PATH_PREFIX", document.DDAE.Paths.APIPrefix)
 	putString(values, "DDAE_SOURCE_INSTANCE", document.DDAE.SourceInstance)
 	putString(values, "DDAE_USERNAME_FILE", document.DDAE.Credentials.UsernameFile)
 	putString(values, "DDAE_PASSWORD_FILE", document.DDAE.Credentials.PasswordFile)
@@ -355,6 +373,12 @@ func layeredLookup(values map[string]string, environment lookupFunc) lookupFunc 
 func putString(values map[string]string, name string, value *string) {
 	if value != nil {
 		values[name] = *value
+	}
+}
+
+func putPathPrefix(values map[string]string, name string, value *yamlPathPrefix) {
+	if value != nil {
+		values[name] = string(*value)
 	}
 }
 

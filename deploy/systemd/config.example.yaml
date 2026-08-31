@@ -37,6 +37,11 @@ security:
 
 ddae:
   base_url: https://ddae.example.invalid
+  paths:
+    # Defaults produce /ping and /v1/*. Use /rest/v1 for both values when
+    # preserving v1.0.0-rc2 routes behind an older gateway.
+    ping_prefix: ""
+    api_prefix: /v1
   source_instance: replace-with-stable-appliance-name
   credentials:
     # systemd LoadCredential overrides these example paths through the unit's

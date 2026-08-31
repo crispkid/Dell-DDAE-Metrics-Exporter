@@ -41,6 +41,11 @@ data:
 
     ddae:
       base_url: https://ddae.example.invalid
+      paths:
+        # Defaults produce /ping and /v1/*. Set both to /rest/v1 only for an
+        # older gateway that still requires the v1.0.0-rc2 route namespace.
+        ping_prefix: ""
+        api_prefix: /v1
       source_instance: replace-with-stable-appliance-name
       credentials:
         username_file: /run/secrets/ddae/username

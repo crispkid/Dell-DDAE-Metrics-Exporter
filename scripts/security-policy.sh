@@ -31,13 +31,23 @@ if ! grep -Eq 'MaxRequestsInFlight:[[:space:]]*5' internal/server/server.go ||
   printf 'security failed: Prometheus handler concurrency/timeout differs from the approved bounds\n' >&2
   exit 1
 fi
-if ! grep -Eq 'serviceabilityLogListPath[[:space:]]*=[[:space:]]*"/rest/v1/serviceability-events"' internal/ddae/allowlist.go ||
-  ! grep -Eq 'serviceabilityLogDetailPath[[:space:]]*=[[:space:]]*"/rest/v1/serviceability-events/"' internal/ddae/allowlist.go ||
+if ! grep -Eq 'DefaultDDAEPingPathPrefix[[:space:]]*=[[:space:]]*""' internal/config/config.go ||
+  ! grep -Eq 'DefaultDDAEAPIPathPrefix[[:space:]]*=[[:space:]]*"/v1"' internal/config/config.go ||
+  ! grep -Eq 'pingSuffix[[:space:]]*=[[:space:]]*"/ping"' internal/ddae/allowlist.go ||
+  ! grep -Eq 'serviceabilityLogListSuffix[[:space:]]*=[[:space:]]*"/serviceability-events"' internal/ddae/allowlist.go ||
+  ! grep -Eq 'serviceabilityLogDetailSuffix[[:space:]]*=[[:space:]]*"/serviceability-events/"' internal/ddae/allowlist.go ||
+  ! grep -Eq 'tokenPath[[:space:]]*=[[:space:]]*"/auth/realms/ddae/protocol/openid-connect/token"' internal/ddae/allowlist.go ||
+  ! grep -Eq 'ping:[[:space:]]+pingPrefix \+ pingSuffix' internal/ddae/allowlist.go ||
+  ! grep -Eq 'serviceabilityLogList:[[:space:]]+apiPrefix \+ serviceabilityLogListSuffix' internal/ddae/allowlist.go ||
   ! grep -Eq 'filepath\.Join\(options\.StateDir, "serviceability-logs\.db"\)' internal/logstate/store.go ||
   ! grep -Eq 'PublishServiceabilityLog' internal/kafka/producer.go ||
   ! grep -Eq '"serviceability_log"' internal/kafka/producer.go ||
   ! grep -Eq 'Key: "ddae-record-kind"' internal/kafka/producer.go; then
-  printf 'security failed: Serviceability Logs route/state/record-kind isolation differs from the approved contract\n' >&2
+  printf 'security failed: DDAE prefix/suffix/token or Serviceability Logs isolation differs from the approved contract\n' >&2
+  exit 1
+fi
+if grep -ERn --include='*.go' --exclude='*_test.go' 'ResolveReference|path\.Join|url\.JoinPath' internal/ddae; then
+  printf 'security failed: DDAE routes must use exact validated prefix-plus-suffix composition\n' >&2
   exit 1
 fi
 if grep -ERn --include='*.go' 'descLabels\("ddae_serviceability_log_[^"]+".*(log_id|message|resource|topic|endpoint|timestamp)' internal/metrics; then
@@ -63,7 +73,7 @@ go test \
   ./internal/serviceability \
   ./internal/logstate \
   ./internal/logpublisher \
-  -run 'YAML|Secret|TLS|Insecure|Warn|Allowlist|Mutation|Redact|DetailPath|Sensitive'
+  -run 'YAML|Secret|TLS|Insecure|Warn|Allowlist|Mutation|Redact|DetailPath|Sensitive|PathPrefix|ConfiguredPath'
 
 if grep -ERn --include='*.go' --exclude='*_test.go' 'ProxyFromEnvironment|http\.Method(Patch|Put|Delete)' internal/ddae; then
 	printf 'security failed: unsafe proxy setting or DDAE mutation method found\n' >&2

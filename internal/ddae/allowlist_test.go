@@ -7,10 +7,13 @@ import (
 )
 
 func TestAllowlistContainsOnlyApprovedProductGETPaths(t *testing.T) {
-	paths := []string{pingPath, clustersPath, nodesPath, lockPath, powerPath, alertListPath, alertDetailPath}
+	if pingPath != "/ping" {
+		t.Fatalf("default Ping path = %q", pingPath)
+	}
+	paths := []string{clustersPath, nodesPath, lockPath, powerPath, alertListPath, alertDetailPath}
 	for _, path := range paths {
-		if !strings.HasPrefix(path, "/rest/v1/") {
-			t.Fatalf("unversioned path %q", path)
+		if !strings.HasPrefix(path, "/v1/") {
+			t.Fatalf("default API path %q is outside /v1", path)
 		}
 	}
 	if http.MethodGet != "GET" {

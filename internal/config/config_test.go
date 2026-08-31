@@ -51,6 +51,9 @@ func TestLoadDefaultsAndSecrets(t *testing.T) {
 	if cfg.ListenAddress != "127.0.0.1:9469" || cfg.AlertDetailConcurrency != 4 {
 		t.Fatalf("defaults not applied: %#v", cfg)
 	}
+	if cfg.DDAEPingPathPrefix != "" || cfg.DDAEAPIPathPrefix != "/v1" {
+		t.Fatalf("path-prefix defaults ping=%q api=%q", cfg.DDAEPingPathPrefix, cfg.DDAEAPIPathPrefix)
+	}
 	if cfg.ServiceabilityLogMonitoringEnabled || cfg.KafkaServiceabilityLogTopic != "ddae-serviceability-logs" ||
 		cfg.ServiceabilityLogDetailConcurrency != 4 || cfg.ServiceabilityLogListResponseMaxBytes != 8*1024*1024 {
 		t.Fatalf("serviceability defaults not applied: %#v", cfg)

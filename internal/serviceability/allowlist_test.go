@@ -8,8 +8,8 @@ import (
 
 func TestServiceabilityAllowlistContainsExactlyDocumentedGETRoutes(t *testing.T) {
 	want := map[string]string{
-		"serviceability_log_list":   "/rest/v1/serviceability-events",
-		"serviceability_log_detail": "/rest/v1/serviceability-events/{id}",
+		"serviceability_log_list":   "/v1/serviceability-events",
+		"serviceability_log_detail": "/v1/serviceability-events/{id}",
 	}
 	seen := make(map[string]string)
 	for _, operation := range ddae.ApprovedOperations() {

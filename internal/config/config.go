@@ -14,8 +14,11 @@ import (
 )
 
 const (
-	secretFileMaxBytes = 64 * 1024
-	responseMaxBytes   = 64 * 1024 * 1024
+	secretFileMaxBytes        = 64 * 1024
+	responseMaxBytes          = 64 * 1024 * 1024
+	ddaePathPrefixMaxBytes    = 128
+	DefaultDDAEPingPathPrefix = ""
+	DefaultDDAEAPIPathPrefix  = "/v1"
 )
 
 // Secret deliberately has no String or marshaling methods. Callers must opt in
@@ -35,6 +38,8 @@ type Config struct {
 	AlertCollectionInterval             time.Duration
 	ServiceabilityLogCollectionInterval time.Duration
 	DDAEBaseURL                         *url.URL
+	DDAEPingPathPrefix                  string
+	DDAEAPIPathPrefix                   string
 	SourceInstance                      string
 	DDAEUsername                        Secret
 	DDAEPassword                        Secret
@@ -144,6 +149,14 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	cfg.DDAEBaseURL, err = validateOrigin(baseRaw)
 	if err != nil {
 		return cfg, fmt.Errorf("DDAE_BASE_URL is invalid: %w", err)
+	}
+	cfg.DDAEPingPathPrefix = optionalText(lookup, "DDAE_PING_PATH_PREFIX", DefaultDDAEPingPathPrefix)
+	if err := ValidateDDAEPathPrefix(cfg.DDAEPingPathPrefix); err != nil {
+		return cfg, fmt.Errorf("DDAE_PING_PATH_PREFIX is invalid: %w", err)
+	}
+	cfg.DDAEAPIPathPrefix = optionalText(lookup, "DDAE_API_PATH_PREFIX", DefaultDDAEAPIPathPrefix)
+	if err := ValidateDDAEPathPrefix(cfg.DDAEAPIPathPrefix); err != nil {
+		return cfg, fmt.Errorf("DDAE_API_PATH_PREFIX is invalid: %w", err)
 	}
 
 	if source, ok := lookup("DDAE_SOURCE_INSTANCE"); ok {
@@ -384,6 +397,41 @@ func validateOrigin(raw string) (*url.URL, error) {
 	u.Path = ""
 	u.RawPath = ""
 	return u, nil
+}
+
+// ValidateDDAEPathPrefix accepts only an empty prefix or a canonical ASCII
+// absolute path namespace. It deliberately does not normalize the input:
+// configuration must describe the exact bytes sent before a compiled suffix.
+func ValidateDDAEPathPrefix(value string) error {
+	if value == "" {
+		return nil
+	}
+	if len(value) > ddaePathPrefixMaxBytes {
+		return fmt.Errorf("must be at most %d bytes", ddaePathPrefixMaxBytes)
+	}
+	if value[0] != '/' {
+		return errors.New("must begin with a slash")
+	}
+	if value[len(value)-1] == '/' {
+		return errors.New("must not end with a slash")
+	}
+	for _, segment := range strings.Split(value[1:], "/") {
+		if segment == "" {
+			return errors.New("must not contain an empty segment")
+		}
+		if segment == "." || segment == ".." {
+			return errors.New("must not contain dot segments")
+		}
+		for i := 0; i < len(segment); i++ {
+			ch := segment[i]
+			if ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' ||
+				ch >= '0' && ch <= '9' || strings.ContainsRune("._~-", rune(ch)) {
+				continue
+			}
+			return errors.New("contains a character outside the canonical path grammar")
+		}
+	}
+	return nil
 }
 
 func validateSourceInstance(value string) error {

@@ -1,7 +1,7 @@
 # DDAE Exporter Runbook
 
 This runbook covers the container, Kubernetes and VM/systemd deployment
-profiles for the DDAE-4 local implementation. It is not evidence that any profile has run in an
+profiles for the DDAE-5 local implementation. It is not evidence that any profile has run in an
 authorized environment. Dell DDAE 1.5.0, Kafka, OpenSearch and alert-delivery
 validation remain release blockers.
 
@@ -12,7 +12,8 @@ validation remain release blockers.
   `state.db` and `serviceability-logs.db` files. Never share `state.dir` between
   concurrently running processes.
 - A dedicated least-privilege DDAE identity authorized only for the nine GET
-  operations listed in the root `README.md`; the token request is the sole POST.
+  operations listed in the root `README.md`. By default these use `/ping` and
+  `/v1/*`; the token request remains the sole fixed POST.
 - An isolated alert Kafka topic and a separate Serviceability Logs topic whose
   consumers perform idempotent OpenSearch upsert by Kafka record key. Brokers
   must support TLS and `acks=all`. A hard
@@ -36,6 +37,13 @@ runtime through approved file paths. Direct secret environment values remain a
 compatibility interface; YAML never accepts plaintext secret values.
 Do not place secret values in ConfigMaps, environment files, command arguments,
 container image layers, logs or Harness evidence.
+
+Set `ddae.paths.ping_prefix` and `ddae.paths.api_prefix` for the actual gateway
+before rollout. Omitted settings use an empty Ping prefix and `/v1` API prefix,
+producing `/ping` and `/v1/*`. A gateway that still requires v1.0.0-rc2 routes
+uses `/rest/v1` for both settings. The Dell PDF Ping-operation form uses
+`ping_prefix: /rest` with `api_prefix: /rest/v1`. Prefix selection is
+deterministic: the exporter does not probe or retry an alternate namespace.
 
 Create Kubernetes Secrets out of band with these keys:
 
@@ -98,6 +106,7 @@ authorization.
 |---|---|---|
 | Authentication failures | Confirm credential files exist and are readable; inspect only the bounded `auth` class | Correct/rotate the dedicated identity; never print token or password values |
 | TLS failures | Check CA mount and hostname against the certificate | Replace the approved CA/certificate; guarded insecure diagnosis requires explicit approval and its output is never release evidence |
+| Management API returns 404 | Compare the configured Ping/API prefixes with the gateway's documented route namespace and sanitized ingress/service observations | Correct `ddae.paths.ping_prefix` or `ddae.paths.api_prefix` and restart; do not add fallback routes, change fixed suffixes or treat a 401 as response-schema proof |
 | One collector fails | Inspect its bounded failure class and snapshot age | Validate only its fixed GET route/shape; do not add fallback routes or generic decoding |
 | Alert list incomplete | Compare the sanitized count relationship in the authorized environment | Stop release, confirm enumeration behavior, and amend the specification if pagination is required |
 | Serviceability Log list incomplete | Observe the fixed completeness/deferred metrics and sanitized counts in an authorized environment | Keep the logs pipeline not ready, retain safe IDs for bounded processing, and confirm Dell list semantics before release |
@@ -115,6 +124,8 @@ authorized, separately controlled diagnostic tooling.
 1. Back up the state volume while the exporter is stopped, or use an atomic
    volume snapshot supported by the platform.
 2. Record the binary/image digest, configuration revision and event schema.
+   For an RC2 gateway, add `ping_prefix: /rest/v1` and
+   `api_prefix: /rest/v1` before starting the DDAE-5 binary.
 3. Stop the old instance and allow its configured shutdown grace period.
 4. Start exactly one new instance against the existing state volume.
 5. Confirm liveness, readiness, snapshot age and Kafka buffered count.
@@ -134,9 +145,10 @@ until normal Kafka draining and alert readiness are confirmed.
 
 Use Kubernetes `Recreate`, not a rolling overlap, when alerts are enabled
 because bbolt enforces one writer. For rollback, stop the new process and
-restore the previous immutable binary/image and compatible environment
-configuration. A DDAE-1 binary ignores the new YAML, so restore its environment
-settings explicitly. The DDAE-3 schema marker is extra metadata that DDAE-2
+first restore both prefixes to the previous route namespace. If configuration
+rollback is insufficient, restore the previous immutable binary/image and its
+compatible configuration after a clean stop. A DDAE-1 binary ignores the new
+YAML, so restore its environment settings explicitly. The DDAE-3 schema marker is extra metadata that DDAE-2
 ignores, so the current database remains backward-readable; preserve all
 outbox records and stop the only writer before either upgrade or rollback.
 `serviceability-logs.db` uses an independent schema marker, primary-integrity

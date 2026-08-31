@@ -20,7 +20,9 @@ func TestServiceabilityDetailUsesOneEncodedRequestSegment(t *testing.T) {
 		fmt.Fprintf(writer, `{"id":%q}`, id)
 	}))
 	defer server.Close()
-	client, err := NewClient(clientConfig(t, server.URL, trustedServerCA(t, server), nil))
+	client, err := NewClient(clientConfig(t, server.URL, trustedServerCA(t, server), map[string]string{
+		"DDAE_API_PATH_PREFIX": "/custom-api",
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +31,7 @@ func TestServiceabilityDetailUsesOneEncodedRequestSegment(t *testing.T) {
 	if err != nil || result.ID != id {
 		t.Fatalf("detail=%#v err=%v", result, err)
 	}
-	want := "/rest/v1/serviceability-events/%E6%97%A5%E8%AA%8C%2Fone%20segment"
+	want := "/custom-api/serviceability-events/%E6%97%A5%E8%AA%8C%2Fone%20segment"
 	if requestURI != want {
 		t.Fatalf("request URI = %q, want %q", requestURI, want)
 	}
