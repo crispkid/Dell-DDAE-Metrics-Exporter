@@ -12,8 +12,8 @@ validation remain release blockers.
   `state.db` and `serviceability-logs.db` files. Never share `state.dir` between
   concurrently running processes.
 - A dedicated least-privilege DDAE identity authorized only for the nine GET
-  operations listed in the root `README.md`. By default these use `/ping` and
-  `/v1/*`; the token request remains the sole fixed POST.
+  operations used by the exporter. By default these use `/ping` and `/v1/*`;
+  the token request remains the sole fixed POST.
 - An isolated alert Kafka topic and a separate Serviceability Logs topic whose
   consumers perform idempotent OpenSearch upsert by Kafka record key. Brokers
   must support TLS and `acks=all`. A hard
@@ -30,9 +30,8 @@ validation remain release blockers.
 
 ## Configuration and secrets
 
-The root `README.md` summarizes the important settings, precedence and path
-compatibility. The complete committed YAML example is
-`deploy/systemd/config.example.yaml`. Select the file with `--config`
+The complete committed YAML example is `deploy/systemd/config.example.yaml`.
+Select the file with `--config`
 (preferred) or `DDAE_EXPORTER_CONFIG_FILE`. Supply DDAE credentials and any
 Kafka password at runtime through approved file paths. Direct secret
 environment values remain a compatibility interface; YAML never accepts

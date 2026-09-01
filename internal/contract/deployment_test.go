@@ -3,7 +3,6 @@ package contract
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -101,34 +100,7 @@ func TestDeploymentProfilesUseStrictYAMLAndSeparateSecrets(t *testing.T) {
 	}
 }
 
-func TestDDAEPathPrefixDocumentationAndDeploymentContract(t *testing.T) {
-	readme := repositoryFile(t, "README.md")
-	for _, required := range []string{
-		"[繁體中文](README.zh-TW.md)",
-		"ddae.paths.ping_prefix", "ddae.paths.api_prefix",
-		"DDAE_PING_PATH_PREFIX", "DDAE_API_PATH_PREFIX",
-		"GET /ping", "GET /v1/ddae-clusters",
-		"| RC2 compatibility | `/rest/v1` | `/rest/v1` |",
-		"maximum length of 128 bytes", "runtime", "alternate-path fallback",
-		"deploy/systemd/config.example.yaml", "docs/runbook.md",
-	} {
-		if !strings.Contains(readme, required) {
-			t.Errorf("README lacks path-prefix contract %q", required)
-		}
-	}
-	translatedReadme := repositoryFile(t, "README.zh-TW.md")
-	for _, required := range []string{
-		"[English](README.md)", "ddae.paths.ping_prefix", "ddae.paths.api_prefix",
-		"DDAE_PING_PATH_PREFIX", "DDAE_API_PATH_PREFIX",
-		"GET /ping", "GET /v1/ddae-clusters",
-		"| RC2 compatibility | `/rest/v1` | `/rest/v1` |",
-		"最大長度是 128 bytes", "runtime discovery", "alternate-path fallback",
-		"deploy/systemd/config.example.yaml", "docs/runbook.md",
-	} {
-		if !strings.Contains(translatedReadme, required) {
-			t.Errorf("Traditional Chinese README lacks path-prefix contract %q", required)
-		}
-	}
+func TestDDAEPathPrefixRunbookContract(t *testing.T) {
 	runbook := repositoryFile(t, "docs", "runbook.md")
 	for _, required := range []string{
 		"ddae.paths.ping_prefix", "ddae.paths.api_prefix",
@@ -139,52 +111,4 @@ func TestDDAEPathPrefixDocumentationAndDeploymentContract(t *testing.T) {
 			t.Errorf("runbook lacks path-prefix contract %q", required)
 		}
 	}
-}
-
-func TestREADMELanguageSwitchAndTechnicalExamplesMatch(t *testing.T) {
-	english := repositoryFile(t, "README.md")
-	traditionalChinese := repositoryFile(t, "README.zh-TW.md")
-	if !strings.Contains(english, "\nEnglish | [繁體中文](README.zh-TW.md)\n") {
-		t.Fatal("English README language switch does not match the public format")
-	}
-	if !strings.Contains(traditionalChinese, "\n[English](README.md) | 繁體中文\n") {
-		t.Fatal("Traditional Chinese README language switch does not match the public format")
-	}
-	englishBlocks := technicalFencedBlocks(english)
-	translatedBlocks := technicalFencedBlocks(traditionalChinese)
-	if !reflect.DeepEqual(englishBlocks, translatedBlocks) {
-		t.Fatal("README technical command and configuration examples differ by language")
-	}
-}
-
-func technicalFencedBlocks(document string) []string {
-	lines := strings.Split(document, "\n")
-	blocks := make([]string, 0)
-	var current []string
-	capture := false
-	inside := false
-	for _, line := range lines {
-		if strings.HasPrefix(line, "```") {
-			if !inside {
-				inside = true
-				capture = line != "```text"
-				if capture {
-					current = []string{line}
-				}
-				continue
-			}
-			if capture {
-				current = append(current, line)
-				blocks = append(blocks, strings.Join(current, "\n"))
-			}
-			inside = false
-			capture = false
-			current = nil
-			continue
-		}
-		if inside && capture {
-			current = append(current, line)
-		}
-	}
-	return blocks
 }

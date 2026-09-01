@@ -20,6 +20,8 @@ Desktop.ini
 # Local coding-agent instructions, governance, and verification harness
 **/AGENT.md
 **/AGENTS.md
+**/AGENT.MD
+**/AGENTS.MD
 **/agent.md
 **/agents.md
 **/HARNESS/
@@ -36,6 +38,8 @@ Desktop.ini
 **/CODE_REVIEW.md.example
 **/DEVELOPMENT_PLAN.md
 **/DEVELOPMENT_PLAN.md.example
+**/EXECUTION_PLAN.md
+**/EXECUTION_PLAN.md.example
 **/SPECIFICATION.md
 **/SPECIFICATION.md.example
 **/SPEC_CHANGELOG.md
@@ -44,10 +48,12 @@ Desktop.ini
 **/TEST_PLAN.md.example
 **/TRACEABILITY.md
 **/TRACEABILITY.md.example
-/plans/*.md
-/plans/**/*.md
-/docs/decisions/*.md
-/docs/decisions/**/*.md
+**/ACTIVE_CHANGE
+**/ACTIVE_CHANGE.example
+**/plans/*.md
+**/plans/**/*.md
+**/docs/decisions/*.md
+**/docs/decisions/**/*.md
 
 # Build, package, test, and generated evidence
 /bin/
