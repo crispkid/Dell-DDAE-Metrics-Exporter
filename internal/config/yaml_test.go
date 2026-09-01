@@ -249,25 +249,34 @@ func TestCommittedSystemdExampleUsesStrictYAMLSchema(t *testing.T) {
 }
 
 func TestREADMEFullYAMLExampleUsesStrictSchema(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	const marker = "```yaml\nversion: 1 # Configuration schema version"
-	start := strings.Index(string(data), marker)
-	if start < 0 {
-		t.Fatal("README full YAML example start is missing")
-	}
-	start += len("```yaml\n")
-	end := strings.Index(string(data[start:]), "\n```")
-	if end < 0 {
-		t.Fatal("README full YAML example end is missing")
-	}
-	values, err := decodeYAML(data[start : start+end])
-	if err != nil {
-		t.Fatalf("README full YAML example: %v", err)
-	}
-	if values["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"] != "false" {
-		t.Fatalf("README serviceability log mode = %q", values["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"])
+	for _, test := range []struct {
+		file   string
+		marker string
+	}{
+		{file: "README.md", marker: "```yaml\nversion: 1 # Configuration schema version"},
+		{file: "README.zh-TW.md", marker: "```yaml\nversion: 1 # 設定格式版本"},
+	} {
+		t.Run(test.file, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("..", "..", test.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			start := strings.Index(string(data), test.marker)
+			if start < 0 {
+				t.Fatal("full YAML example start is missing")
+			}
+			start += len("```yaml\n")
+			end := strings.Index(string(data[start:]), "\n```")
+			if end < 0 {
+				t.Fatal("full YAML example end is missing")
+			}
+			values, err := decodeYAML(data[start : start+end])
+			if err != nil {
+				t.Fatalf("full YAML example: %v", err)
+			}
+			if values["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"] != "false" {
+				t.Fatalf("serviceability log mode = %q", values["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"])
+			}
+		})
 	}
 }

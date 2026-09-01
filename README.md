@@ -1,5 +1,7 @@
 # Dell DDAE Metrics Exporter
 
+[English](README.md) | [繁體中文](README.zh-TW.md)
+
 Dell DDAE Metrics Exporter is a read-only monitoring service for Dell Data Domain
 Active Enterprise (DDAE) 1.5.0. It exports system status as Prometheus metrics and
 can publish serviceability alerts and Serviceability Logs to Kafka.

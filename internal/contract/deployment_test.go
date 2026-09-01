@@ -103,6 +103,7 @@ func TestDeploymentProfilesUseStrictYAMLAndSeparateSecrets(t *testing.T) {
 func TestDDAEPathPrefixDocumentationAndDeploymentContract(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 	for _, required := range []string{
+		"[繁體中文](README.zh-TW.md)",
 		"ddae.paths.ping_prefix", "ddae.paths.api_prefix",
 		"DDAE_PING_PATH_PREFIX", "DDAE_API_PATH_PREFIX",
 		"GET /ping", "GET /v1/ddae-clusters",
@@ -111,6 +112,18 @@ func TestDDAEPathPrefixDocumentationAndDeploymentContract(t *testing.T) {
 	} {
 		if !strings.Contains(readme, required) {
 			t.Errorf("README lacks path-prefix contract %q", required)
+		}
+	}
+	translatedReadme := repositoryFile(t, "README.zh-TW.md")
+	for _, required := range []string{
+		"[English](README.md)", "ddae.paths.ping_prefix", "ddae.paths.api_prefix",
+		"DDAE_PING_PATH_PREFIX", "DDAE_API_PATH_PREFIX",
+		"GET /ping", "GET /v1/ddae-clusters",
+		"| 保留 v1.0.0-rc2 routes | `/rest/v1` | `/rest/v1` |",
+		"最大長度：128 bytes", "runtime discovery", "alternate-path",
+	} {
+		if !strings.Contains(translatedReadme, required) {
+			t.Errorf("Traditional Chinese README lacks path-prefix contract %q", required)
 		}
 	}
 	runbook := repositoryFile(t, "docs", "runbook.md")
