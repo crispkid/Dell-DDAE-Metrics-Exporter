@@ -248,34 +248,38 @@ func TestCommittedSystemdExampleUsesStrictYAMLSchema(t *testing.T) {
 	}
 }
 
-func TestREADMEFullYAMLExampleUsesStrictSchema(t *testing.T) {
-	for _, test := range []struct {
-		file   string
-		marker string
-	}{
-		{file: "README.md", marker: "```yaml\nversion: 1 # Configuration schema version"},
-		{file: "README.zh-TW.md", marker: "```yaml\nversion: 1 # 設定格式版本"},
-	} {
-		t.Run(test.file, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join("..", "..", test.file))
+func TestREADMEQuickStartYAMLUsesStrictSchema(t *testing.T) {
+	const startMarker = "<!-- quick-start-config:start -->\n```yaml\n"
+	const endMarker = "\n```\n<!-- quick-start-config:end -->"
+	for _, file := range []string{"README.md", "README.zh-TW.md"} {
+		t.Run(file, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("..", "..", file))
 			if err != nil {
 				t.Fatal(err)
 			}
-			start := strings.Index(string(data), test.marker)
+			start := strings.Index(string(data), startMarker)
 			if start < 0 {
-				t.Fatal("full YAML example start is missing")
+				t.Fatal("quick-start YAML example start is missing")
 			}
-			start += len("```yaml\n")
-			end := strings.Index(string(data[start:]), "\n```")
+			start += len(startMarker)
+			end := strings.Index(string(data[start:]), endMarker)
 			if end < 0 {
-				t.Fatal("full YAML example end is missing")
+				t.Fatal("quick-start YAML example end is missing")
 			}
 			values, err := decodeYAML(data[start : start+end])
 			if err != nil {
-				t.Fatalf("full YAML example: %v", err)
+				t.Fatalf("quick-start YAML example: %v", err)
 			}
-			if values["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"] != "false" {
-				t.Fatalf("serviceability log mode = %q", values["DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED"])
+			for key, want := range map[string]string{
+				"DDAE_RESOURCE_MONITORING_ENABLED":           "true",
+				"DDAE_ALERT_MONITORING_ENABLED":              "false",
+				"DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED": "false",
+				"DDAE_PING_PATH_PREFIX":                      "",
+				"DDAE_API_PATH_PREFIX":                       "/v1",
+			} {
+				if values[key] != want {
+					t.Fatalf("%s = %q, want %q", key, values[key], want)
+				}
 			}
 		})
 	}

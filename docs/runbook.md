@@ -30,11 +30,13 @@ validation remain release blockers.
 
 ## Configuration and secrets
 
-The full strict YAML contract, precedence and defaults are in the root
-`README.md`. Select the file with `--config` (preferred) or
-`DDAE_EXPORTER_CONFIG_FILE`. Supply DDAE credentials and any Kafka password at
-runtime through approved file paths. Direct secret environment values remain a
-compatibility interface; YAML never accepts plaintext secret values.
+The root `README.md` summarizes the important settings, precedence and path
+compatibility. The complete committed YAML example is
+`deploy/systemd/config.example.yaml`. Select the file with `--config`
+(preferred) or `DDAE_EXPORTER_CONFIG_FILE`. Supply DDAE credentials and any
+Kafka password at runtime through approved file paths. Direct secret
+environment values remain a compatibility interface; YAML never accepts
+plaintext secret values.
 Do not place secret values in ConfigMaps, environment files, command arguments,
 container image layers, logs or Harness evidence.
 
@@ -157,10 +159,11 @@ modify or consume alert state.
 
 ## Verification status
 
-Local tests and build gates may be run with `./HARNESS/harness.sh`. The
-`integration` and `e2e` stages intentionally return blocked until Peter Chu
-authorizes the required non-production environments. A blocked stage is not a
-pass, waiver or release approval.
+Run local tests and build gates with `./scripts/stage-lint.sh`,
+`./scripts/stage-test.sh`, `./scripts/stage-coverage.sh`, and
+`./scripts/build.sh`. The `integration` and `e2e` stages intentionally return
+blocked until Peter Chu authorizes the required non-production environments. A
+blocked stage is not a pass, waiver or release approval.
 
 The self-hosted `authorized-integration` CI job accepts only an explicit
 `workflow_dispatch` opt-in on `refs/heads/main`; it checks out the dispatched

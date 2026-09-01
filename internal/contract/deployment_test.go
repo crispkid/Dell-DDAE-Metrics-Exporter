@@ -107,8 +107,9 @@ func TestDDAEPathPrefixDocumentationAndDeploymentContract(t *testing.T) {
 		"ddae.paths.ping_prefix", "ddae.paths.api_prefix",
 		"DDAE_PING_PATH_PREFIX", "DDAE_API_PATH_PREFIX",
 		"GET /ping", "GET /v1/ddae-clusters",
-		"| Preserve v1.0.0-rc2 routes | `/rest/v1` | `/rest/v1` |",
-		"Maximum length: 128 bytes", "runtime discovery", "alternate-path",
+		"| RC2 compatibility | `/rest/v1` | `/rest/v1` |",
+		"maximum length of 128 bytes", "runtime", "alternate-path fallback",
+		"deploy/systemd/config.example.yaml", "docs/runbook.md",
 	} {
 		if !strings.Contains(readme, required) {
 			t.Errorf("README lacks path-prefix contract %q", required)
@@ -119,8 +120,9 @@ func TestDDAEPathPrefixDocumentationAndDeploymentContract(t *testing.T) {
 		"[English](README.md)", "ddae.paths.ping_prefix", "ddae.paths.api_prefix",
 		"DDAE_PING_PATH_PREFIX", "DDAE_API_PATH_PREFIX",
 		"GET /ping", "GET /v1/ddae-clusters",
-		"| 保留 v1.0.0-rc2 routes | `/rest/v1` | `/rest/v1` |",
-		"最大長度：128 bytes", "runtime discovery", "alternate-path",
+		"| RC2 compatibility | `/rest/v1` | `/rest/v1` |",
+		"最大長度是 128 bytes", "runtime discovery", "alternate-path fallback",
+		"deploy/systemd/config.example.yaml", "docs/runbook.md",
 	} {
 		if !strings.Contains(translatedReadme, required) {
 			t.Errorf("Traditional Chinese README lacks path-prefix contract %q", required)
