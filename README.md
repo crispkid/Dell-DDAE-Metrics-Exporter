@@ -42,31 +42,7 @@ Serviceability Log events for downstream indexing and alerting workflows.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    DDAE[DDAE Management API]
-
-    subgraph Exporter[Dell DDAE Metrics Exporter]
-        Client[OAuth and read-only API client]
-        Resources[Resource collectors]
-        Alerts[Alert pipeline]
-        Logs[Serviceability Logs pipeline]
-        Snapshot[Current snapshot]
-        AlertState[(state.db)]
-        LogState[(serviceability-logs.db)]
-        HTTP[HTTP server]
-    end
-
-    Prometheus[Prometheus]
-    Kafka[Kafka topics]
-    Consumers[Downstream consumers]
-
-    DDAE --> Client
-    Client --> Resources --> Snapshot --> HTTP --> Prometheus
-    Client --> Alerts --> AlertState --> Kafka
-    Client --> Logs --> LogState --> Kafka
-    Kafka --> Consumers
-```
+![Dell DDAE Metrics Exporter architecture](docs/architecture.svg)
 
 - The API client owns authentication, TLS, request bounds, retries, and the
   fixed operation allowlist.

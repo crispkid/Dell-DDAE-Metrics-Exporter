@@ -42,31 +42,7 @@ consumer 則可使用 Alert 與 Serviceability Log events，建立後續 indexin
 
 ## 架構
 
-```mermaid
-flowchart LR
-    DDAE[DDAE Management API]
-
-    subgraph Exporter[Dell DDAE Metrics Exporter]
-        Client[OAuth and read-only API client]
-        Resources[Resource collectors]
-        Alerts[Alert pipeline]
-        Logs[Serviceability Logs pipeline]
-        Snapshot[Current snapshot]
-        AlertState[(state.db)]
-        LogState[(serviceability-logs.db)]
-        HTTP[HTTP server]
-    end
-
-    Prometheus[Prometheus]
-    Kafka[Kafka topics]
-    Consumers[Downstream consumers]
-
-    DDAE --> Client
-    Client --> Resources --> Snapshot --> HTTP --> Prometheus
-    Client --> Alerts --> AlertState --> Kafka
-    Client --> Logs --> LogState --> Kafka
-    Kafka --> Consumers
-```
+![Dell DDAE Metrics Exporter 架構](docs/architecture.svg)
 
 - API client 負責 authentication、TLS、request bounds、retries 與固定的
   operation allowlist。

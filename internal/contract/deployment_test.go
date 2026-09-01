@@ -157,6 +157,29 @@ func TestREADMELanguageSwitchAndTechnicalExamplesMatch(t *testing.T) {
 	}
 }
 
+func TestREADMEArchitectureUsesStaticAsset(t *testing.T) {
+	for _, file := range []string{"README.md", "README.zh-TW.md"} {
+		document := repositoryFile(t, file)
+		if !strings.Contains(document, "](docs/architecture.svg)") {
+			t.Errorf("%s does not reference the static architecture diagram", file)
+		}
+		if strings.Contains(document, "```mermaid") {
+			t.Errorf("%s still depends on Mermaid rendering", file)
+		}
+	}
+
+	diagram := repositoryFile(t, "docs", "architecture.svg")
+	for _, required := range []string{
+		"DDAE Management API", "OAuth and read-only", "Resource", "Current",
+		"Alert pipeline", "Serviceability Logs", "state.db",
+		"serviceability-logs.db", "Prometheus", "Kafka topics", "Downstream",
+	} {
+		if !strings.Contains(diagram, required) {
+			t.Errorf("architecture diagram lacks %q", required)
+		}
+	}
+}
+
 func technicalFencedBlocks(document string) []string {
 	lines := strings.Split(document, "\n")
 	blocks := make([]string, 0)
