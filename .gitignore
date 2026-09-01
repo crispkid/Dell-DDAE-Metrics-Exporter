@@ -18,8 +18,14 @@ Desktop.ini
 *.bak
 
 # Local coding-agent instructions, governance, and verification harness
+**/AGENT.md
 **/AGENTS.md
-/HARNESS/
+**/agent.md
+**/agents.md
+**/HARNESS/
+**/harness/
+**/*HARNESS*
+**/*harness*
 
 # Agent-local development, specification, and test documents
 **/PROJECT.md
