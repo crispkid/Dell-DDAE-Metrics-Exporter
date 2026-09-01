@@ -3,6 +3,7 @@ package contract
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -138,4 +139,52 @@ func TestDDAEPathPrefixDocumentationAndDeploymentContract(t *testing.T) {
 			t.Errorf("runbook lacks path-prefix contract %q", required)
 		}
 	}
+}
+
+func TestREADMELanguageSwitchAndTechnicalExamplesMatch(t *testing.T) {
+	english := repositoryFile(t, "README.md")
+	traditionalChinese := repositoryFile(t, "README.zh-TW.md")
+	if !strings.Contains(english, "\nEnglish | [繁體中文](README.zh-TW.md)\n") {
+		t.Fatal("English README language switch does not match the public format")
+	}
+	if !strings.Contains(traditionalChinese, "\n[English](README.md) | 繁體中文\n") {
+		t.Fatal("Traditional Chinese README language switch does not match the public format")
+	}
+	englishBlocks := technicalFencedBlocks(english)
+	translatedBlocks := technicalFencedBlocks(traditionalChinese)
+	if !reflect.DeepEqual(englishBlocks, translatedBlocks) {
+		t.Fatal("README technical command and configuration examples differ by language")
+	}
+}
+
+func technicalFencedBlocks(document string) []string {
+	lines := strings.Split(document, "\n")
+	blocks := make([]string, 0)
+	var current []string
+	capture := false
+	inside := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "```") {
+			if !inside {
+				inside = true
+				capture = line != "```text"
+				if capture {
+					current = []string{line}
+				}
+				continue
+			}
+			if capture {
+				current = append(current, line)
+				blocks = append(blocks, strings.Join(current, "\n"))
+			}
+			inside = false
+			capture = false
+			current = nil
+			continue
+		}
+		if inside && capture {
+			current = append(current, line)
+		}
+	}
+	return blocks
 }
