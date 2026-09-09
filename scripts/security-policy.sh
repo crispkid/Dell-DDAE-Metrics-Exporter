@@ -76,7 +76,7 @@ if [[ "$(printf '%s\n' "$serviceability_reason_labels" | sed '/^$/d' | wc -l | t
 fi
 
 go vet ./...
-go test ./internal/portable ./internal/ddae ./internal/contract -run 'PortablePrivacy|CaptureCrypto|PortableNormalExporter|PortableCrypto|PortablePath|PortableOffline'
+go test ./internal/queryclient ./internal/querystate ./internal/queries -run TestQuery
 go test \
   ./cmd/ddae-exporter \
   ./internal/config \

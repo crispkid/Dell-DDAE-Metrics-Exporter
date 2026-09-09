@@ -8,4 +8,4 @@ fi
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root_dir"
-go test -tags=integration ./integration -run '^Test(AuthorizedIntegration|PortableAuthorizedDDAE)$'
+go test -tags=integration ./integration -run '^TestAuthorizedIntegration$'

@@ -277,3 +277,40 @@ records and their corresponding source changes to make a handoff reproducible.
   self-tests must run from an isolated path without spaces until a coordinated
   baseline release fixes the shared test; normal project Harness commands have
   been verified in the actual repository path.
+
+## Current Parser Amendment
+
+DDAE-8 (Specification 2.4.0) is the active, user-approved cluster parser fix.
+The approval evidence and candidate-to-canonical transcription are recorded in
+DEVELOPMENT_PLAN.md and plans/DDAE-8.md. DDAE-7 and inherited external release
+gates remain incomplete. Authorized demo testing in this conversation provides
+limited functional observations only, not a supported-release certification.
+
+## Portable retirement — current user direction (2026-09-09)
+
+The current repository user explicitly requested removal of the complete Portable
+feature and confirmed removal of its package, diagnostic/packaging source,
+dedicated tests and build integration, preserving historical documents and the
+normal Exporter. Portable was testing-only and is neither a production nor a
+pre-production deliverable. This explicit instruction supersedes earlier current
+Portable component/lifecycle statements above and DDAE-7 implementation scope.
+Historical approved spec/plan digests are preserved, not relabeled as approved
+retirement plans. See `plans/portable-retirement.md` for scope and evidence.
+
+## Current Query Monitoring Amendment
+
+DDAE-9 Specification 2.5.0 is user-approved in this conversation. Its canonical
+records transcribe plans/DDAE-9-query-monitoring-candidate.md, approved by OK
+after queue and output clarification. DDAE-8 parser changes and Portable retirement
+remain preserved. Query integration is version-bounded and not release-certified.
+
+DDAE-9 is now implemented locally. Authorized demo query-only collection passed;
+full release gates and independent review remain incomplete. See plans/DDAE-9.md.
+
+## Current History Backfill Amendment
+
+DDAE-10 Specification 2.6.0 is approved by the current user in this conversation.
+Its canonical records transcribe plans/DDAE-10-history-backfill-candidate.md.
+DDAE-9 and earlier work remain preserved. See plans/DDAE-10.md for progress.
+DDAE-10 is implemented locally with synthetic and authorized Demo functional evidence.
+Inherited release gates, full Harness and independent review remain incomplete.

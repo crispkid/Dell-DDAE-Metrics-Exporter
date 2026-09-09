@@ -30,8 +30,7 @@ skills 不屬於這份 Git 交付；接續工作所需的決策與進度應寫�
 - `.env`、本機 `config.yaml`、`*.local.*`、秘密檔案、私鑰與真實憑證。
 - `bin/`、`dist/`、`output/`、`coverage/`、`test-results/`、dependency caches。
 - Exporter state/outbox databases、診斷 captures、解密資料及私人測試結果。
-- `Portable/` 的產生物、現場設定、`secrets/`、`trust/`、`keys/`、`results/`、
-  `analysis/`；Portable 程式碼、說明、範本與 launchers 則可提交。
+- 舊 Portable 診斷工具已移除；既有本機診斷資料仍不得提交。
 
 即使 capture 已加密，`*.ddaecap` 仍不提交。`.gitignore` 不會移除已追蹤的機密，
 也不會自動 commit 或 push。確認變更時應檢查 `git diff --cached`，不要只看
@@ -40,8 +39,7 @@ skills 不屬於這份 Git 交付；接續工作所需的決策與進度應寫�
 ## 新電腦初始化
 
 Harness 支援 macOS 與 Linux 的 Bash 3.2+。Windows 開發請使用 WSL，並在 WSL
-內安裝 Git、Go、ripgrep 與 C compiler；原生 Windows Portable 診斷套件不是完整
-開發環境。`go test -race` 需要受支援平台及可用的 C compiler。
+內安裝 Git、Go、ripgrep 與 C compiler。`go test -race` 需要受支援平台及可用的 C compiler。
 
 ```bash
 git clone https://github.com/crispkid/Dell-DDAE-Metrics-Exporter.git

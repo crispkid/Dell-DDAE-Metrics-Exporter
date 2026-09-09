@@ -3,7 +3,7 @@
 [English](README.md) | 繁體中文
 
 Dell DDAE Metrics Exporter 是以 Go 開發的唯讀監控服務，可從 Dell Data
-Domain Active Enterprise（DDAE）1.5.0 收集維運資料、輸出 Prometheus
+Analytics Engine（DDAE）1.5.0 收集維運資料、輸出 Prometheus
 metrics，並將具明確型別的 serviceability records 發布至 Kafka。
 
 ## 專案概述
@@ -16,6 +16,12 @@ password-grant client 完成驗證，定期呼叫固定的 Management API allowl
 Kafka 監控系統。Prometheus 直接從 Exporter 取得目前的資源狀態；Kafka
 consumer 則可使用 Alert 與 Serviceability Log events，建立後續 indexing 與
 告警流程。
+
+查詢監控另使用獨立的 Insights OIDC 工作階段，預設關閉。新增執行中／排隊
+數、已觀察查詢的耗時分布，以及選擇性 Kafka 逐筆明細（提交者、來源、狀態
+與耗時，不含 SQL）。參考[設定與限制](docs/query-monitoring.md)及
+[query-only 範例](deploy/query-monitoring.example.yaml)。歷史完整性尚未證明，
+不可將這些統計視為完整稽核。
 
 ## 核心功能
 
@@ -85,9 +91,7 @@ consumer 則可使用 Alert 與 Serviceability Log events，建立後續 indexin
 
 ## 開始使用
 
-Windows 11 免安裝診斷請參考 [Portable 操作說明](Portable/README.zh-TW.md)。
-套件包含獨立設定、加密業務 API 擷取及離線 Parser 重播；Windows 原生執行
-與 authenticated DDAE 驗證仍需另外取得證據。
+Portable 測試工具已移除；保留歷史規格與核准紀錄，不作為正式或預備環境交付。
 
 以下流程會從 Source Code 建立 resources-only instance。此模式透過 DDAE 與
 Exporter HTTP interfaces 提供 Prometheus resource metrics。
@@ -971,7 +975,7 @@ steps 與 state-preservation rules。
 
 ## 文件
 
-- [完整設定範例](deploy/systemd/config.example.yaml)
+- [完整設定範例](deploy/systemd/config.example.yaml)（列出所有 YAML 欄位，包括查詢／佇列監控、Kafka 事件與 mTLS）
 - [維運手冊](docs/runbook.md)
 - [Kubernetes ConfigMap](deploy/kubernetes/configmap.yaml)
 - [Kubernetes Deployment and Service](deploy/kubernetes/deployment.yaml)
@@ -982,3 +986,5 @@ steps 與 state-preservation rules。
 ## 授權
 
 本專案採用 [Apache License 2.0](LICENSE)。
+
+DDAE-10 新增預設關閉的[日誌／查詢歷史回補](docs/history-backfill.md)：時間窗切分、進度持久化、重啟重播及未完成／阻塞指標。有限窗口完成不代表全部歷史完整。

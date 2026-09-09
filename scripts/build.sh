@@ -18,5 +18,3 @@ mkdir -p bin
 CGO_ENABLED=0 go build -trimpath \
   -ldflags "-s -w -X main.version=$version -X main.revision=$revision -X main.buildDate=$build_date" \
   -o bin/ddae-exporter ./cmd/ddae-exporter
-
-./scripts/build-portable.sh

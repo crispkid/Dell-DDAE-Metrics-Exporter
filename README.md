@@ -3,7 +3,7 @@
 English | [繁體中文](README.zh-TW.md)
 
 Dell DDAE Metrics Exporter is a read-only Go service that collects operational
-data from Dell Data Domain Active Enterprise (DDAE) 1.5.0, exposes Prometheus
+data from Dell Data Analytics Engine (DDAE) 1.5.0, exposes Prometheus
 metrics, and publishes typed serviceability records to Kafka.
 
 ## Overview
@@ -16,6 +16,10 @@ Platform engineers, SRE teams, and operators can use it to connect DDAE with
 their Prometheus and Kafka-based observability systems. Prometheus reads current
 resource state directly from the exporter. Kafka consumers can use alert and
 Serviceability Log events for downstream indexing and alerting workflows.
+
+Query monitoring additionally uses an independent Insights OIDC session. See
+[Query monitoring](docs/query-monitoring.md) for queue counts, duration distributions,
+per-query Kafka details and the version/coverage limits.
 
 ## Key Features
 
@@ -86,10 +90,9 @@ Serviceability Log events for downstream indexing and alerting workflows.
 
 ## Getting Started
 
-For the self-contained Windows 11 diagnostic package, start with the
-[Portable operator guide](Portable/README.zh-TW.md). It includes separate
-configuration, encrypted business API capture and offline parser replay.
-Native Windows and authenticated DDAE validation remain separate evidence gates.
+The former Windows Portable diagnostic package has been removed. It was a
+testing tool and is not a production or pre-production deliverable. Historical
+specifications and approval records are retained for traceability.
 
 The following procedure builds a resources-only instance from source. This mode
 provides Prometheus resource metrics through the DDAE and exporter HTTP
@@ -986,7 +989,7 @@ recovery steps and state-preservation rules.
 
 ## Documentation
 
-- [Complete configuration example](deploy/systemd/config.example.yaml)
+- [Complete configuration example](deploy/systemd/config.example.yaml) (all YAML settings, including query/queue monitoring, Kafka events and mTLS)
 - [Operations runbook](docs/runbook.md)
 - [Kubernetes ConfigMap](deploy/kubernetes/configmap.yaml)
 - [Kubernetes Deployment and Service](deploy/kubernetes/deployment.yaml)
@@ -997,3 +1000,9 @@ recovery steps and state-preservation rules.
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
+
+## Optional query monitoring
+
+See [Query monitoring](docs/query-monitoring.md) for queue counts, observed duration
+histograms and optional per-query Kafka details; default off. A query-only
+example is in [deploy/query-monitoring.example.yaml](deploy/query-monitoring.example.yaml).

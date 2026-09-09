@@ -21,6 +21,8 @@ type Server struct {
 }
 
 type PipelineMode struct {
+	HistoryReady              func() bool
+	QueryReady                func() bool
 	ResourcesEnabled          bool
 	AlertsEnabled             bool
 	ServiceabilityLogsEnabled bool
@@ -57,7 +59,10 @@ func New(address string, registry prometheus.Gatherer, state *snapshot.Store, st
 			return
 		}
 		writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		if !state.ReadyFor(time.Now(), staleAfter, server.resourcesEnabled, server.alertsEnabled, server.serviceabilityLogsEnabled) {
+		legacyEnabled := server.resourcesEnabled || server.alertsEnabled || server.serviceabilityLogsEnabled
+		legacyReady := !legacyEnabled || state.ReadyFor(time.Now(), staleAfter, server.resourcesEnabled, server.alertsEnabled, server.serviceabilityLogsEnabled)
+		queryReady := mode.QueryReady == nil || mode.QueryReady()
+		if (!legacyEnabled && mode.QueryReady == nil) || !legacyReady || !queryReady || (mode.HistoryReady != nil && !mode.HistoryReady()) {
 			writer.WriteHeader(http.StatusServiceUnavailable)
 			_, _ = writer.Write([]byte("not ready\n"))
 			return

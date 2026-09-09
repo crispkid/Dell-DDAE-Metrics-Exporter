@@ -3253,3 +3253,393 @@ globally. Generated binaries/runtime captures are ignored, not committed.
   authorized DDAE field evidence. Neither is inferred from local results.
 - Existing independent security review, supply-chain and external release
   gates remain; no commit/tag/release/publication is authorized by this change.
+
+## DDAE-8 Cluster response compatibility
+
+### Specification Metadata
+
+- Specification Version: 2.4.0
+- Status: active
+- Owner: Repository Maintainers
+- Clarification Status: resolved
+
+### Problem Statement
+
+The authorized demo returned an object containing a results array. The live
+cluster client expects a bare array and fails to decode it. Other resource
+collectors succeeded. This independent amendment supersedes DDAE-7's excluded
+cluster fix only; historical DDAE-7 requirements and evidence remain preserved.
+
+### Goals
+
+Accept both cluster list shapes through the same production/replay decoder.
+
+### Non-goals
+
+CA trust, API defaults, Windows STATE_DIR, alerts, Kafka, packaging and releases.
+
+### Actors and Scenarios
+
+Operators collect resources from an authorized DDAE target; maintainers replay
+synthetic or authorized captured responses using the same typed parser.
+
+### Requirement Index
+
+| Requirement ID | Priority | Requirement | Acceptance IDs |
+|---|---|---|---|
+| REQ-DDAE-8-001 | must | The cluster decoder MUST accept bare arrays and objects containing a non-null array-valued `results`. Both forms MUST yield the same typed clusters and existing normalization/metrics for equivalent content. Unknown envelope fields MUST NOT enter metrics or logs. | AC-DDAE-8-001 |
+| REQ-DDAE-8-002 | must | Missing/null/non-array `results`, unsupported top levels, null/non-object items, malformed JSON and trailing JSON MUST fail. Existing response-size, nesting, request, retry, identity, optional-resource validation and stale/partial-failure limits MUST remain effective. | AC-DDAE-8-002 |
+| REQ-DDAE-8-003 | must | Live collection, recorded-body decoding and portable diagnostics/replay MUST use the same cluster decoder. A valid envelope MUST no longer fail solely because its top level is an object. | AC-DDAE-8-003 |
+
+| REQ-DDAE-8-004 | must | The cluster decoder MUST accept legacy string clusterStatus and an object with a required non-null string status; it MUST preserve absent legacy status behavior, use the unchanged status normalizer, ignore message/reason metadata and reject malformed object status. | AC-DDAE-8-004 |
+| REQ-DDAE-8-005 | must | Coordinator and worker resources MUST accept legacy direct CPU/memory and nested resources objects; CPU quantity strings and non-negative base-10 JSON integers MUST map to the existing quantity-string DTO, retaining existing optional-value handling, quantity validation and metric units; other numeric forms/types and malformed/null resources objects MUST fail. | AC-DDAE-8-005 |
+| REQ-DDAE-8-006 | must | Simultaneous direct and nested resource representations for the same role MUST fail; existing routes, TLS, security, metric identity and freshness behavior MUST remain unchanged. | AC-DDAE-8-006 |
+
+### Acceptance Criteria
+
+| Acceptance ID | Requirement ID | Given | When | Then |
+|---|---|---|---|---|
+| AC-DDAE-8-001 | REQ-DDAE-8-001 | Synthetic valid and invalid cluster responses | Production client, collection and recorded parsing run | synthetic nonempty and empty arrays/envelopes produce equivalent typed data and cluster metrics. |
+| AC-DDAE-8-002 | REQ-DDAE-8-002 | Synthetic valid and invalid cluster responses | Production client, collection and recorded parsing run | invalid-shape, malformed-item, trailing/oversized-body, duplicate/missing-ID and missing/invalid optional-resource cases remain failures at their appropriate decode/validation layer; failures do not become successful empty inventory. |
+| AC-DDAE-8-003 | REQ-DDAE-8-003 | Synthetic valid and invalid cluster responses | Production client, collection and recorded parsing run | client/recorded/portable results agree for equivalent valid and invalid fixtures; synthetic self-test expectations match the new contract. |
+
+| AC-DDAE-8-004 | REQ-DDAE-8-004 | Synthetic legacy and observed field layouts | Live and recorded cluster decoding and metric normalization run | Equivalent legacy/object status yields the same normalized state; missing/null/non-string object status fails; metadata does not enter output. |
+| AC-DDAE-8-005 | REQ-DDAE-8-005 | Synthetic legacy and observed field layouts | Live and recorded cluster decoding and metric normalization run | Both layouts produce identical configured CPU/memory metrics and recorded/live values; invalid numeric forms and resource shapes fail; absent optional quantities are omitted. |
+| AC-DDAE-8-006 | REQ-DDAE-8-006 | Synthetic legacy and observed field layouts | Live and recorded cluster decoding and metric normalization run | Mixed layouts within one role fail even if values agree, while coordinator and worker may independently use either layout; no output contains ignored metadata. |
+
+### Interfaces, Data, and Failure Behavior
+
+Preserve existing cluster DTO fields, public return types, metrics, API
+allowlist, authentication, deadlines/retries, body/nesting limits and freshness.
+Accept [] and {"results":[]} as empty lists; reject absent/null inventory.
+Preserve identity and optional-resource normalization. The approved field-mapping
+amendment adds only clusterStatus.status, role.resources and integer CPU input;
+normalized DTO fields and metric meanings remain unchanged.
+Unknown envelope metadata is not exposed. Diagnostic decode, semantic validity
+and contract results remain separate.
+
+### Quality Attributes
+
+Bounded typed decoding, synthetic regression fixtures and honest partial health.
+Live diagnostic TLS bypass is functional evidence only, not trusted-TLS evidence.
+
+### Compatibility and Migration
+
+Preserve valid legacy arrays; expand accepted results envelopes. Deliberately
+reject top-level null and null items. No state migration or API version claim.
+Rollback uses the previous binary without discarding unrelated local changes.
+
+### Assumptions
+
+The observed structure identifies the decoder mismatch, not a new supported
+product version. Existing cluster field semantics and validation remain valid.
+
+### Open Questions
+
+- None.
+
+## Verification Record Location
+
+Current execution results and limits are retained in plans/DDAE-8.md.
+
+## DDAE-9 Query monitoring
+
+### Specification Metadata
+
+- Specification Version: 2.5.0
+- Status: active
+- Owner: Current repository user in this Codex conversation
+- Clarification Status: resolved
+
+### Problem Statement
+
+Management API collection does not include query queue, duration or submitter.
+The approved candidate demonstrates version-specific Insights read access.
+
+### Goals
+
+Add disabled-by-default query metrics and optional isolated Kafka details.
+
+### Non-goals
+
+No SQL capture/submission/cancellation, permission changes, Portable restoration,
+complete audit guarantee, automatic endpoint guessing or release certification.
+
+### Actors and Scenarios
+
+Operators configure a read-only Insights account with all-query visibility and
+consume aggregate metrics or sanitized per-query details.
+
+### Requirement Index
+
+| Requirement | Priority | Requirement text | Acceptance |
+|---|---|---|---|
+| REQ-DDAE-9-001 | must | Query pipeline MUST 預設關閉；啟用後獨立設定 Insights HTTPS origin、明確 auth HTTPS origin/realm、角色與獨立密碼檔。MUST NOT 將 Management API client secret 自動送到 Insights。關閉時不驗證、不建立或使用此 pipeline 的認證、Kafka 或 state 資源。 | AC-DDAE-9-001 |
+| REQ-DDAE-9-002 | must | MUST 使用觀察到的 OIDC 網頁登入與記憶體 cookie jar；登入 redirect 最多 8 次，只准設定的兩個 origin 及限定 auth/callback 路徑。密碼 POST 只能送到指定 auth origin 的 realm login-actions/authenticate；拒絕其他 host、HTTP、未知表單與 MFA/額外流程，不自動降級。一般業務請求只能 GET allowlist。401 最多重新登入一次；403 不以其他角色繞過。全程 TLS 預設驗證，沿用明確雙重 diagnostic opt-in，且與 Kafka/Management transport 隔離。 | AC-DDAE-9-002 |
+| REQ-DDAE-9-003 | must | 每次 collection MUST 以設定角色確認 cluster/info.allQueries=true，否則不可將局部資料標示為叢集統計。角色只在 request header 選擇，不修改授權。受支援 schema 以 479-e.4 驗證；缺欄位、錯誤型別、HTML、截斷 JSON、重複 identity 或不合法時間 MUST 回報可辨識失敗。 | AC-DDAE-9-003 |
+| REQ-DDAE-9-004 | must | running/queued MUST 取 overview 最新有效 upstream time 樣本，使用 gauge；樣本過期或沒有樣本不可輸出零或延長其新鮮度。MUST NOT 把 failedQueries 樣本或歷史清單筆數當作累積計數。背景輪詢不重疊；scrape 不觸發 API。 | AC-DDAE-9-004 |
+| REQ-DDAE-9-005 | must | MUST 用 bounded history list + bounded detail GET 蒐集已觀察到的逐筆查詢；以 source_instance/query_id 識別。API 的 list 完整性與保留期限未經證明時，history coverage MUST 標為 unknown，不承諾完整稽核，也不依缺席推論查詢已完成或刪除。detail 未取得前不可捏造 user 或 duration。 | AC-DDAE-9-005 |
+| REQ-DDAE-9-006 | must | Kafka query schema v1 MUST 只包含 source_instance、query_id、user、source、固定狀態、提交/完成/觀察時間及 elapsed/queued/execution/cpu 秒數；缺少 optional 欄位省略。MUST NOT 包含 SQL、prepared SQL、IP、principal、session properties、catalog/table metadata、任意錯誤文字、憑證或 cookie。user 與 source 是 detail data，不能作為 Prometheus labels。 | AC-DDAE-9-006 |
+| REQ-DDAE-9-007 | must | Query detail Kafka MUST 使用獨立 topic、query-events.db、publisher 與 bounded durable outbox；預設 event 輸出關閉。topic 不可與 alerts/logs 重複。穩定 key、at-least-once、下游 idempotent upsert；重複 poll/重啟不得重複計入已觀察完成數/耗時。入列、dedup checkpoint 與 aggregate 更新需同一 transaction。滿額、寫入/送出失敗不可靜默丟失，MUST 顯示 unhealthy/backpressure。 | AC-DDAE-9-007 |
+| REQ-DDAE-9-008 | must | MUST 提供有界 metrics、freshness、scope、history coverage、detail failure、outbox 與 publish 狀態。持久化已觀察 terminal query 的計數與 histogram aggregate，明確命名 observed，不能宣称代表所有查詢。未知 state 映射 unknown，不當成功或失敗終態。整體 health/readiness 需反映已啟用 Query pipeline，保留其他 pipeline 的 partial failure 語意。 | AC-DDAE-9-008 |
+| REQ-DDAE-9-009 | must | MUST 更新 README、runbook、YAML/env precedence、deployment examples、NetworkPolicy 對 Insights/IdP 的設定需求與 SDD traceability；正常建置不含 Portable。測試 fixture 僅用合成資料。實測結果須區分功能、TLS、非零負載、Kafka 與完整 Harness gate，不聲稱未執行的項目通過。 | AC-DDAE-9-009 |
+
+### Acceptance Criteria
+
+| Acceptance | Requirement | Criterion |
+|---|---|---|
+| AC-DDAE-9-001 | REQ-DDAE-9-001 | TEST-DDAE-9-001 verifies the approved requirement with synthetic success, boundary and failure cases. |
+| AC-DDAE-9-002 | REQ-DDAE-9-002 | TEST-DDAE-9-002 verifies the approved requirement with synthetic success, boundary and failure cases. |
+| AC-DDAE-9-003 | REQ-DDAE-9-003 | TEST-DDAE-9-003 verifies the approved requirement with synthetic success, boundary and failure cases. |
+| AC-DDAE-9-004 | REQ-DDAE-9-004 | TEST-DDAE-9-004 verifies the approved requirement with synthetic success, boundary and failure cases. |
+| AC-DDAE-9-005 | REQ-DDAE-9-005 | TEST-DDAE-9-005 verifies the approved requirement with synthetic success, boundary and failure cases. |
+| AC-DDAE-9-006 | REQ-DDAE-9-006 | TEST-DDAE-9-006 verifies the approved requirement with synthetic success, boundary and failure cases. |
+| AC-DDAE-9-007 | REQ-DDAE-9-007 | TEST-DDAE-9-007 verifies the approved requirement with synthetic success, boundary and failure cases. |
+| AC-DDAE-9-008 | REQ-DDAE-9-008 | TEST-DDAE-9-008 verifies the approved requirement with synthetic success, boundary and failure cases. |
+| AC-DDAE-9-009 | REQ-DDAE-9-009 | TEST-DDAE-9-009 verifies the approved requirement with synthetic success, boundary and failure cases. |
+
+### Interfaces, Data, and Failure Behavior
+
+
+新增 internal/queryclient（schema、固定 GET routes、OIDC session）與
+internal/queries（scheduler、normalization）、internal/querystate（獨立 bbolt
+狀態/outbox）、query publisher；沿用現有 Kafka transport/TLS 實作，避免改變
+alert/log event schema。整合 app lifecycle、snapshot、metrics、server health、
+config/YAML/env，query-only 模式不得要求 Management API 認證。
+
+固定業務 GET routes：/ui/api/insights/cluster/info、
+/ui/api/insights/overview/queries、/ui/api/insights/history/queries、
+/ui/api/insights/history/queries/{validated-id}。不跟隨回應中的 self URL。
+近期 /ui/api/query 已探索，但本次不作為完整並行數來源，也不新增第二套 duration
+schema：並行數使用 overview、逐筆 detail 使用 Insights history。
+
+ID 僅接受 1–256 bytes 的 ASCII 字母、數字、底線、連字號；URL escape path
+segment；任何不相符 ID 回報 invalid，不帶入任意 URL。JSON duration 嚴格接受
+非負整數 milliseconds，轉為 seconds；缺值與 0 分開。UTC RFC3339 timestamp
+嚴格驗證；拒絕不合理未來樣本（超過 5 秒），elapsed 不能以 CPU time 取代。
+同一 history list 內重複 ID 視為完整性錯誤。
+
+預設 interval=30s、request_timeout=5s、cycle_timeout=20s、stale_after=90s、
+response_max_bytes=16MiB（上限64MiB）、detail.max_per_cycle=100、concurrency=4
+（1–32）、max_history_records=1000（1–10000）、retry_max=2，重试仅限 GET
+的暫時性錯誤且受 cycle deadline 約束。overview 與 details 狀態獨立，detail
+失敗不得抹去有效的 overview；但 enabled pipeline readiness 必須反映失敗。
+
+Checkpoint 預設上限100000、retention=720h；過期 checkpoint 再出現的終態 record
+不得重新計入 aggregate：以持久化 terminal watermark/retention floor 限制
+可接納時間，晚到且超界的 record 回報 gap，不假裝已完整處理。達到列表上限、
+超過本地預算或 history continuity 未證明時，coverage 保持 unknown/limited。
+不使用未驗證的 pagination 參數來宣稱掃描完整。
+
+Outbox 預設256MiB/10000事件，单事件上限64KiB；user/source 各上限1024 UTF-8
+bytes，不截斷身份造成碰撞。Kafka event export 關閉時仍需 query state 以保留
+observed counters；不建立 Kafka producer。安全例外只涵蓋選定 query detail
+欄位，禁止原始 payload logging/capture。
+
+### Metric mapping
+
+所有 metric HELP 必須說明 upstream sample 或 observed coverage；下列皆無 user、
+query_id、source、SQL 等 unbounded labels。固定 state label 不超過
+finished/failed/canceled/unknown；Histogram state 僅前三個 terminal 狀態。
+
+| Prometheus name | Type / unit | Source and behavior |
+|---|---|---|
+| ddae_queries_running | gauge / queries | latest overview.metric.runningQueries；非負整數；stale 時省略 |
+| ddae_queries_queued | gauge / queries | latest overview.metric.queuedQueries；非負整數；stale 時省略 |
+| ddae_query_sample_timestamp_seconds | gauge / Unix seconds | overview.time；不使用 HTTP fetch time 取代 |
+| ddae_query_collection_success | gauge / boolean | 本次 overview/schema/scope 檢查成功 |
+| ddae_query_detail_collection_success | gauge / boolean | 本次 bounded detail collection 無失敗 |
+| ddae_query_scope_all | gauge / boolean | allQueries=true 且本次 scope 檢查有效；失敗為0 |
+| ddae_query_history_complete | gauge / boolean | 本次 list 的完整性有證據才為1；本版 UI API 未證明時為0 |
+| ddae_queries_observed_completed_total{state} | persistent counter / queries | deduplicated terminal records，非叢集完整總數 |
+| ddae_query_observed_elapsed_seconds{state} | persistent histogram / seconds | 終態 elapsedTime/1000，只記一次；buckets .01,.05,.1,.5,1,5,10,30,60,300,+Inf |
+| ddae_query_observed_execution_seconds{state} | persistent histogram / seconds | 終態 executionTime/1000，缺值省略，不填0 |
+| ddae_query_observed_queued_seconds{state} | persistent histogram / seconds | 終態 queuedTime/1000，缺值省略，不填0 |
+| ddae_query_events_pending | gauge / events | durable outbox pending count |
+| ddae_query_event_publish_success | gauge / boolean | query publisher 狀態；未啟用 event export 時省略 |
+
+新增 query mode 的 series budget 固定 <200；不得把 sampled gauges 單純積分成
+準確 throughput，也不得用 truncated history 推算平均延遲/P95 的完整母體。
+
+
+### Quality Attributes
+
+Bounded requests, durable deduplication, safe secret handling and fixed labels.
+
+### Compatibility and Migration
+
+Existing pipelines remain unchanged; separate query-events.db and topic;
+disable query monitoring to roll back without deleting data.
+
+### Assumptions
+
+Insights UI API compatibility was observed on 479-e.4. History coverage is
+unknown, TLS bypass evidence is diagnostic only, and MFA is unsupported.
+
+### Open Questions
+
+- None.
+
+## DDAE-10 Bounded history backfill
+
+### Specification Metadata
+
+- Specification Version: 2.6.0
+- Status: active
+- Owner: Current repository user in this Codex conversation
+- Clarification Status: resolved
+
+### Problem Statement
+
+Single lists truncate serviceability logs at 500 and query history at 1000.
+
+### Goals
+
+Approved bounded time-window backfill, durable progress, safe replay and isolated polling.
+
+### Non-goals
+
+No full permanent audit guarantee, new service-health metrics, SQL, Portable or deployment.
+
+### Actors and Scenarios
+
+Operators opt in to bounded recovery of histories beyond one response.
+
+### Requirement Index
+
+| Requirement | Priority | Requirement text | Acceptance |
+|---|---|---|---|
+| REQ-DDAE-10-001 | must | MUST 提供獨立、預設關閉的 logs/query backfill 設定；關閉時不建立回補 worker/狀態。啟用須有對應主 pipeline。YAML/env precedence 沿用現有規則。 | AC-DDAE-10-001 |
+| REQ-DDAE-10-002 | must | MUST 僅由 typed UTC bounds 產生固定清單路徑及必要參數；禁止任意 filter、URL、offset、user/SQL 篩選；沿用各自認證與 TLS 約束。 | AC-DDAE-10-002 |
+| REQ-DDAE-10-003 | must | MUST 固定每輪掃描的上下界；logs 用 updatetime，queries 用 startDate/endDate。達上限即切分，邊界保守重疊再去重；最小 1 秒仍達上限時停止推進並標 incomplete。 | AC-DDAE-10-003 |
+| REQ-DDAE-10-004 | must | MUST 持久化未完成區間、待處理 ID/marker、已確認進度，綁定來源與設定指紋。只有資料已交給既有 durable store 後才可確認進度；崩潰可重做、不能跳過。 | AC-DDAE-10-004 |
+| REQ-DDAE-10-005 | must | MUST 沿用既有事件白名單、獨立 topic、at-least-once 及 observed aggregates；跨前景/回補/重啟重複不能重計終態，不能以舊 marker 覆寫較新狀態。filtered list MUST NOT 用於 absence reconciliation。 | AC-DDAE-10-005 |
+| REQ-DDAE-10-006 | must | MUST 限制頁數、detail 數、併發、response bytes、工作佇列與每輪期限；獨立背景回補不占用即時 overview 的執行鎖／請求配額；scrape 不呼叫 DDAE。 | AC-DDAE-10-006 |
+| REQ-DDAE-10-007 | must | MUST 回報有界進度、失敗、過期與容量狀態；完成僅表示指定窗口走訪結束。query_history_complete 維持 0，不能把有限窗口當全域完整清單。 | AC-DDAE-10-007 |
+| REQ-DDAE-10-008 | must | MUST 定義回滾與 retention gap；不因持久化進度損毀而自動丟棄資料，不因 interval 改變重設 checkpoint。停用回補保留既有事件及進度。 | AC-DDAE-10-008 |
+| REQ-DDAE-10-009 | must | MUST 更新完整設定範例、README、runbook、traceability，並區分合成測試、Demo 功能、trusted TLS、Kafka 及完整 Harness 結果。 | AC-DDAE-10-009 |
+
+### Acceptance Criteria
+
+| Acceptance | Requirement | Criterion |
+|---|---|---|
+| AC-DDAE-10-001 | REQ-DDAE-10-001 | TEST-DDAE-10-001 exercises approved success, failure and boundary matrix. |
+| AC-DDAE-10-002 | REQ-DDAE-10-002 | TEST-DDAE-10-002 exercises approved success, failure and boundary matrix. |
+| AC-DDAE-10-003 | REQ-DDAE-10-003 | TEST-DDAE-10-003 exercises approved success, failure and boundary matrix. |
+| AC-DDAE-10-004 | REQ-DDAE-10-004 | TEST-DDAE-10-004 exercises approved success, failure and boundary matrix. |
+| AC-DDAE-10-005 | REQ-DDAE-10-005 | TEST-DDAE-10-005 exercises approved success, failure and boundary matrix. |
+| AC-DDAE-10-006 | REQ-DDAE-10-006 | TEST-DDAE-10-006 exercises approved success, failure and boundary matrix. |
+| AC-DDAE-10-007 | REQ-DDAE-10-007 | TEST-DDAE-10-007 exercises approved success, failure and boundary matrix. |
+| AC-DDAE-10-008 | REQ-DDAE-10-008 | TEST-DDAE-10-008 exercises approved success, failure and boundary matrix. |
+| AC-DDAE-10-009 | REQ-DDAE-10-009 | TEST-DDAE-10-009 exercises approved success, failure and boundary matrix. |
+
+### Interfaces, Data, and Failure Behavior
+
+
+
+以下兩處具有相同 leaf keys：
+monitoring.serviceability_logs.backfill、monitoring.queries.backfill。
+環境前綴分別為 SERVICEABILITY_LOG_BACKFILL_ 與 QUERY_BACKFILL_。
+主 pipeline 預設開關不改動；本功能不會自動啟用 queries 或 logs。
+
+| YAML leaf / ENV suffix | 預設 | 限制與意義 |
+|---|---|---|
+| enabled / ENABLED | false | 對應主 pipeline 關閉而本設定為 true 時報錯 |
+| lookback / LOOKBACK | 24h | 1h–720h，且不得大於對應 checkpoint retention |
+| overlap / OVERLAP | 2m | 1s–1h、不得大於 lookback；增量掃描向前重疊 |
+| interval / INTERVAL | 30s | 5s–1h；相同 worker 不重疊執行 |
+| cycle_timeout / CYCLE_TIMEOUT | 20s | 主 client request_timeout < 此值 < interval |
+| rescan_interval / RESCAN_INTERVAL | 1h | >= interval、<= lookback；重新走訪滾動 lookback 以捕捉晚到資料 |
+| max_pages_per_cycle / MAX_PAGES_PER_CYCLE | 4 | 1–32，邏輯 list 呼叫數，retry 另受既有 retry_max 與 cycle deadline 限制 |
+| detail_max_per_cycle / DETAIL_MAX_PER_CYCLE | 25 | 1–1000，與前景配額分開計算，文件列明合併上界 |
+| detail_concurrency / DETAIL_CONCURRENCY | 2 | 1–8，<= detail_max_per_cycle |
+| max_pending_records / max_pending_records 的大寫形式 | 10000 | 1000–100000，超限 backpressure，不丟棄 ID |
+
+固定限制：最多 4096 待掃區間、32 MiB 進度邏輯資料、單次進度交易有界。
+回補頁面沿用相應 list response byte limit。Query 頁面判斷使用觀察到的
+1000 截斷界限；QUERY_MAX_HISTORY_RECORDS 必須 >=1000 才能啟用回補，
+它不是可控制伺服器回傳上限的參數。Logs 採有效 threshold 及 totalRecords。
+
+初次回補下界為 now-lookback，上界為啟動時固定的 now（秒精度向外取整）。
+後續增量由 last completed end-overlap 起至新固定 end；每 rescan_interval
+重掃當時的 rolling lookback，捕捉較晚才出現且仍在窗口內的紀錄。
+不自動回補窗口之外的歷史；改 lookback 明確建立新的 bounded sweep，
+已入列事件與 dedup checkpoint 不清除。
+
+### API, State and Failure Contract
+
+Logs：GET <configured api prefix>/serviceability-events，唯一新增參數 filter，
+由程式產生 `(updatetime ge "<UTC>") and (updatetime le "<UTC>")`。
+Queries：GET /ui/api/insights/history/queries，唯一新增參數為
+sortBy=createDate、sortOrder=desc、filter={startDate,endDate}。
+Scope 檢查仍在 query worker 使用既定 cluster/info 執行；報表 endpoint
+僅屬探索驗證，不納入正式 runtime API。
+
+驗證所有頁面 identity、時間型別與範圍；未符合邊界（容許 outward rounding
+重疊）不可當作完成窗口。Logs totalRecords 與有效 unique count 不同時
+切分；缺 threshold/total、malformed、duplicate ID 或無法切分均 fail closed。
+Query 頁面 count>=1000 必須切分；小於上限只能作該窗口可走訪的操作性證據，
+不是完整永久歷史。結果超出本地 response/max record 限制仍屬失敗。
+
+使用新的獨立 STATE_DIR/history-backfill.db（schema v1）存兩種 pipeline 的
+游標／待處理 IDs；不儲存 SQL、user、來源地址或原始回應。維持既有
+query-events.db / serviceability-logs.db schema 與事件格式。
+跨 DB 採保守順序：先 durable 記錄事件／既有去重結果，再 ack 進度。
+任何中斷只能重播；禁止先 ack 造成遺漏。資料庫來源 origin/source identity
+與窗口設定指紋不相符須報出可處理錯誤，不能自動套用到另一目標。
+
+前景與回補可能讀到同 ID：共享既有 store 的交易序列化與事件版本檢查，
+source updated marker 更舊時不覆寫较新 checkpoint／pending event；詳細資料
+回應需重新驗證 ID。缺失 source marker 的事件仍按既有 content hash 去重，
+不得虛構來源時間保證。Query terminal 計數僅使用既有原子 Record 入口一次。
+
+超過既有 retention floor 的 query 不回補計數；記錄 gap、保持 incomplete。
+進度未完成時不得因 pruning 悄悄移動下界；明確回報 expired 狀態，等待縮小
+窗口／重新開始的操作指示。404、403、解析失敗、容量不足均保留待處理項目，
+不由 disappearance 推論業務完成或刪除。取消必須在既有 shutdown grace 內結束。
+
+### Observability and Readiness
+
+新增固定 pipeline label：serviceability_logs、queries（僅啟用者輸出）。
+
+| Metric | Type/unit | 行為 |
+|---|---|---|
+| ddae_history_backfill_enabled | gauge/bool | 已啟用回補 |
+| ddae_history_backfill_success | gauge/bool | 最近 worker cycle 無 source/state/detail 錯誤；啟動前 0 |
+| ddae_history_backfill_pending_windows | gauge/windows | durable 待走訪區間數 |
+| ddae_history_backfill_pending_records | gauge/records | 尚未交付 store 的 IDs 數 |
+| ddae_history_backfill_last_completed_timestamp_seconds | gauge/Unix seconds | 最近完成固定窗口的上界；從未完成時省略 |
+| ddae_history_backfill_incomplete | gauge/bool | 當前窗口仍待掃／受阻／gap，無未完成項目時 0 |
+| ddae_history_backfill_blocked | gauge/bool | 同秒超限、過期、容量或持久化錯誤阻止前進 |
+
+每名稱 HELP 說明有限窗口，不代表所有歷史；最多 14 額外 series。
+沒有 time/ID/user/source/error message labels；時間只能作 metric value。
+
+回補關閉：既有 /readyz 行為保持。回補開啟：
+- pending 本身不等於故障；最近成功、未過期且沒有 blocked 的 worker 可 ready。
+- 連續來源／detail／state 失敗、同秒超限、retention gap 或 stale (>3*interval)
+  使該回補分支不 ready；不移除仍有效的其他 metrics。
+- 對 logs，在回補模式下，已驗證合法但被截斷的前景清單可繼續收集，
+  readiness 由 healthy 前景及回補共同決定；不再單憑截斷就永久不 ready。
+  原全域 list_complete 仍保持 0，時間窗口完成不得將它改為 1。
+- 對 query，running/queued 的 freshness/scope 判斷不變；回補 worker 失敗
+  影響 readiness 但不得覆寫即時 overview 狀態。healthz 仍是 process liveness。
+
+
+### Quality Attributes
+
+Bounded requests, durable progress, privacy, freshness and stable outputs.
+
+### Compatibility and Migration
+
+Default off; preserve existing state schemas and outputs; separate progress database.
+
+### Assumptions
+
+Demo 479-e.4 observed time filtering; source retention and transactional snapshot semantics unknown.
+
+External release gates remain incomplete; source retention, timestamp saturation and Kafka/E2E remain known limitations as in the approved candidate.
+
+### Open Questions
+
+- None.

@@ -31,6 +31,8 @@ func (s Secret) Value() string { return s.value }
 func (s Secret) Empty() bool   { return s.value == "" }
 
 type Config struct {
+	LogBackfill, QueryBackfill          BackfillConfig
+	Query                               QueryConfig
 	ResourceMonitoringEnabled           bool
 	AlertMonitoringEnabled              bool
 	ServiceabilityLogMonitoringEnabled  bool
@@ -100,10 +102,13 @@ func (c Config) InsecureTLSTargets() []string {
 	if !c.AllowInsecureTLS {
 		return targets
 	}
+	if c.Query.Enabled && c.Query.Insecure {
+		targets = append(targets, "query")
+	}
 	if c.DDAETLSInsecureSkipVerify {
 		targets = append(targets, "ddae")
 	}
-	if (c.AlertMonitoringEnabled || c.ServiceabilityLogMonitoringEnabled) && c.KafkaTLSInsecureSkipVerify {
+	if (c.AlertMonitoringEnabled || c.ServiceabilityLogMonitoringEnabled || c.Query.Events) && c.KafkaTLSInsecureSkipVerify {
 		targets = append(targets, "kafka")
 	}
 	return targets
@@ -126,7 +131,14 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	if cfg.ServiceabilityLogMonitoringEnabled, err = boolean(lookup, "DDAE_SERVICEABILITY_LOG_MONITORING_ENABLED", false); err != nil {
 		return cfg, err
 	}
-	if !cfg.ResourceMonitoringEnabled && !cfg.AlertMonitoringEnabled && !cfg.ServiceabilityLogMonitoringEnabled {
+	if cfg.AllowInsecureTLS, err = boolean(lookup, "ALLOW_INSECURE_TLS", false); err != nil {
+		return cfg, err
+	}
+	if cfg.Query, err = loadQuery(lookup, readFile, cfg.AllowInsecureTLS); err != nil {
+		return cfg, err
+	}
+	managementEnabled := cfg.ResourceMonitoringEnabled || cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled
+	if !managementEnabled && !cfg.Query.Enabled {
 		return cfg, errors.New("at least one monitoring pipeline must be enabled")
 	}
 	if cfg.AllowInsecureTLS, err = boolean(lookup, "ALLOW_INSECURE_TLS", false); err != nil {
@@ -142,21 +154,24 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 		return cfg, errors.New("target insecure_skip_verify requires ALLOW_INSECURE_TLS=true")
 	}
 
-	baseRaw, ok := lookup("DDAE_BASE_URL")
-	if !ok || strings.TrimSpace(baseRaw) == "" {
-		return cfg, errors.New("DDAE_BASE_URL is required")
-	}
-	cfg.DDAEBaseURL, err = validateOrigin(baseRaw)
-	if err != nil {
-		return cfg, fmt.Errorf("DDAE_BASE_URL is invalid: %w", err)
-	}
-	cfg.DDAEPingPathPrefix = optionalText(lookup, "DDAE_PING_PATH_PREFIX", DefaultDDAEPingPathPrefix)
-	if err := ValidateDDAEPathPrefix(cfg.DDAEPingPathPrefix); err != nil {
-		return cfg, fmt.Errorf("DDAE_PING_PATH_PREFIX is invalid: %w", err)
-	}
-	cfg.DDAEAPIPathPrefix = optionalText(lookup, "DDAE_API_PATH_PREFIX", DefaultDDAEAPIPathPrefix)
-	if err := ValidateDDAEPathPrefix(cfg.DDAEAPIPathPrefix); err != nil {
-		return cfg, fmt.Errorf("DDAE_API_PATH_PREFIX is invalid: %w", err)
+	if managementEnabled {
+		baseRaw, ok := lookup("DDAE_BASE_URL")
+		if !ok || strings.TrimSpace(baseRaw) == "" {
+			return cfg, errors.New("DDAE_BASE_URL is required")
+		}
+		cfg.DDAEBaseURL, err = validateOrigin(baseRaw)
+		if err != nil {
+			return cfg, fmt.Errorf("DDAE_BASE_URL is invalid: %w", err)
+		}
+		cfg.DDAEPingPathPrefix = optionalText(lookup, "DDAE_PING_PATH_PREFIX", DefaultDDAEPingPathPrefix)
+		if err := ValidateDDAEPathPrefix(cfg.DDAEPingPathPrefix); err != nil {
+			return cfg, fmt.Errorf("DDAE_PING_PATH_PREFIX is invalid: %w", err)
+		}
+		cfg.DDAEAPIPathPrefix = optionalText(lookup, "DDAE_API_PATH_PREFIX", DefaultDDAEAPIPathPrefix)
+		if err := ValidateDDAEPathPrefix(cfg.DDAEAPIPathPrefix); err != nil {
+			return cfg, fmt.Errorf("DDAE_API_PATH_PREFIX is invalid: %w", err)
+		}
+
 	}
 
 	if source, ok := lookup("DDAE_SOURCE_INSTANCE"); ok {
@@ -164,24 +179,27 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 		if err := validateSourceInstance(cfg.SourceInstance); err != nil {
 			return cfg, fmt.Errorf("DDAE_SOURCE_INSTANCE is invalid: %w", err)
 		}
-	} else if cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled {
-		return cfg, errors.New("DDAE_SOURCE_INSTANCE is required when alert or serviceability log monitoring is enabled")
+	} else if cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled || cfg.Query.Enabled {
+		return cfg, errors.New("DDAE_SOURCE_INSTANCE is required when alert, serviceability log or query monitoring is enabled")
 	}
 
-	if cfg.DDAEUsername, err = loadSecret(lookup, readFile, "DDAE_USERNAME", "DDAE_USERNAME_FILE", true); err != nil {
-		return cfg, err
-	}
-	if cfg.DDAEPassword, err = loadSecret(lookup, readFile, "DDAE_PASSWORD", "DDAE_PASSWORD_FILE", true); err != nil {
-		return cfg, err
-	}
-	if cfg.DDAEClientSecret, err = loadSecret(lookup, readFile, "DDAE_CLIENT_SECRET", "DDAE_CLIENT_SECRET_FILE", true); err != nil {
-		return cfg, err
+	if managementEnabled {
+		if cfg.DDAEUsername, err = loadSecret(lookup, readFile, "DDAE_USERNAME", "DDAE_USERNAME_FILE", true); err != nil {
+			return cfg, err
+		}
+		if cfg.DDAEPassword, err = loadSecret(lookup, readFile, "DDAE_PASSWORD", "DDAE_PASSWORD_FILE", true); err != nil {
+			return cfg, err
+		}
+		if cfg.DDAEClientSecret, err = loadSecret(lookup, readFile, "DDAE_CLIENT_SECRET", "DDAE_CLIENT_SECRET_FILE", true); err != nil {
+			return cfg, err
+		}
+
+		cfg.DDAECAFile = optionalText(lookup, "DDAE_CA_FILE", "")
+		if cfg.DDAETLSInsecureSkipVerify && cfg.DDAECAFile != "" {
+			return cfg, errors.New("DDAE_CA_FILE conflicts with DDAE_TLS_INSECURE_SKIP_VERIFY")
+		}
 	}
 
-	cfg.DDAECAFile = optionalText(lookup, "DDAE_CA_FILE", "")
-	if cfg.DDAETLSInsecureSkipVerify && cfg.DDAECAFile != "" {
-		return cfg, errors.New("DDAE_CA_FILE conflicts with DDAE_TLS_INSECURE_SKIP_VERIFY")
-	}
 	cfg.ListenAddress = optionalText(lookup, "EXPORTER_LISTEN_ADDRESS", "127.0.0.1:9469")
 	if err := validateListenAddress(cfg.ListenAddress); err != nil {
 		return cfg, fmt.Errorf("EXPORTER_LISTEN_ADDRESS is invalid: %w", err)
@@ -279,8 +297,8 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 		if err != nil {
 			return cfg, fmt.Errorf("KAFKA_BROKERS is invalid: %w", err)
 		}
-	} else if cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled {
-		return cfg, errors.New("KAFKA_BROKERS is required when alert or serviceability log monitoring is enabled")
+	} else if cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled || cfg.Query.Events {
+		return cfg, errors.New("KAFKA_BROKERS is required when alert, serviceability log or query event publishing is enabled")
 	}
 	if topic, ok := lookup("KAFKA_TOPIC"); ok {
 		cfg.KafkaTopic = topic
@@ -296,6 +314,9 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	}
 	if cfg.AlertMonitoringEnabled && cfg.ServiceabilityLogMonitoringEnabled && cfg.KafkaTopic == cfg.KafkaServiceabilityLogTopic {
 		return cfg, errors.New("KAFKA_SERVICEABILITY_LOG_TOPIC must differ from KAFKA_TOPIC")
+	}
+	if cfg.Query.Events && (cfg.Query.Topic == cfg.KafkaTopic || cfg.Query.Topic == cfg.KafkaServiceabilityLogTopic) {
+		return cfg, errors.New("query Kafka topic must be isolated")
 	}
 	cfg.KafkaClientID = optionalText(lookup, "KAFKA_CLIENT_ID", "ddae-exporter")
 	if len(cfg.KafkaClientID) == 0 || len(cfg.KafkaClientID) > 128 || strings.ContainsAny(cfg.KafkaClientID, "\x00\r\n") {
@@ -380,6 +401,17 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 		return cfg, errors.New("LOG_FORMAT must be json or text")
 	}
 
+	cfg.LogBackfill, err = loadBackfill(lookup, "SERVICEABILITY_LOG_BACKFILL_", cfg.ServiceabilityLogMonitoringEnabled, cfg.RequestTimeout, cfg.ServiceabilityLogCheckpointRetention)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.QueryBackfill, err = loadBackfill(lookup, "QUERY_BACKFILL_", cfg.Query.Enabled, cfg.Query.RequestTimeout, cfg.Query.Retention)
+	if err != nil {
+		return cfg, err
+	}
+	if cfg.QueryBackfill.Enabled && cfg.Query.MaxHistory < 1000 {
+		return cfg, fmt.Errorf("QUERY_MAX_HISTORY_RECORDS must be at least 1000 for backfill")
+	}
 	return cfg, nil
 }
 

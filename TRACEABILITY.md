@@ -198,3 +198,42 @@ The raw-retention exception affects only new diagnostic paths mapped to
 REQ-DDAE-7-005 through REQ-DDAE-7-007 and normal-path isolation under
 REQ-DDAE-7-012. It does not retroactively approve raw retention under DDAE-1,
 DDAE-5 or DDAE-6. Native Windows and DDAE rows remain environment-dependent.
+
+## DDAE-8 Requirement Trace
+
+| Requirement ID | Specification version | Acceptance IDs | Design decision | Task IDs | Implementation | Test IDs | Harness stage | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| REQ-DDAE-8-001 | 2.4.0 | AC-DDAE-8-001 | shared cluster list decoder | TASK-DDAE-8-001, TASK-DDAE-8-002, TASK-DDAE-8-003, TASK-DDAE-8-005 | `path:internal/ddae/types.go` | TEST-DDAE-8-001, TEST-DDAE-8-003 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-8-002 | 2.4.0 | AC-DDAE-8-002 | strict bounded shape and existing semantics | TASK-DDAE-8-001, TASK-DDAE-8-002, TASK-DDAE-8-003, TASK-DDAE-8-005 | `path:internal/ddae/types.go` | TEST-DDAE-8-002 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-8-003 | 2.4.0 | AC-DDAE-8-003 | recorded parser reuses live client | TASK-DDAE-8-001, TASK-DDAE-8-004, TASK-DDAE-8-005 | `path:internal/portable/parser.go` | TEST-DDAE-8-004 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-8-004 | 2.4.0 | AC-DDAE-8-004 | typed field mapping with unchanged output | TASK-DDAE-8-006 | `path:internal/ddae/types.go` | TEST-DDAE-8-005 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-8-005 | 2.4.0 | AC-DDAE-8-005 | typed field mapping with unchanged output | TASK-DDAE-8-007 | `path:internal/ddae/types.go` | TEST-DDAE-8-006 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-8-006 | 2.4.0 | AC-DDAE-8-006 | typed field mapping with unchanged output | TASK-DDAE-8-008 | `path:internal/ddae/types.go` | TEST-DDAE-8-007 | `test` | `stage:test` | Implemented |
+
+## DDAE-9 Requirement Trace
+
+| Requirement ID | Specification version | Acceptance IDs | Design decision | Task IDs | Implementation | Test IDs | Harness stage | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| REQ-DDAE-9-001 | 2.5.0 | AC-DDAE-9-001 | isolated bounded query pipeline | TASK-DDAE-9-001 | `path:internal/config/query.go` | TEST-DDAE-9-001 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-9-002 | 2.5.0 | AC-DDAE-9-002 | isolated bounded query pipeline | TASK-DDAE-9-002 | `path:internal/queryclient/client.go` | TEST-DDAE-9-002 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-9-003 | 2.5.0 | AC-DDAE-9-003 | isolated bounded query pipeline | TASK-DDAE-9-003 | `path:internal/queryclient/client.go` | TEST-DDAE-9-003 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-9-004 | 2.5.0 | AC-DDAE-9-004 | isolated bounded query pipeline | TASK-DDAE-9-004 | `path:internal/queries/pipeline.go` | TEST-DDAE-9-004 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-9-005 | 2.5.0 | AC-DDAE-9-005 | isolated bounded query pipeline | TASK-DDAE-9-005 | `path:internal/queries/pipeline.go` | TEST-DDAE-9-005 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-9-006 | 2.5.0 | AC-DDAE-9-006 | isolated bounded query pipeline | TASK-DDAE-9-006 | `path:internal/queryclient/types.go` | TEST-DDAE-9-006 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-9-007 | 2.5.0 | AC-DDAE-9-007 | isolated bounded query pipeline | TASK-DDAE-9-007 | `path:internal/querystate/store.go` | TEST-DDAE-9-007 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-9-008 | 2.5.0 | AC-DDAE-9-008 | isolated bounded query pipeline | TASK-DDAE-9-008 | `path:internal/queries/pipeline.go` | TEST-DDAE-9-008 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-9-009 | 2.5.0 | AC-DDAE-9-009 | isolated bounded query pipeline | TASK-DDAE-9-009 | `path:docs/query-monitoring.md` | TEST-DDAE-9-009 | `test` | `stage:test` | Implemented |
+
+## DDAE-10 Requirement Trace
+
+| Requirement ID | Specification version | Acceptance IDs | Design decision | Task IDs | Implementation | Test IDs | Harness stage | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| REQ-DDAE-10-001 | 2.6.0 | AC-DDAE-10-001 | bounded durable time windows | TASK-DDAE-10-001 | `path:internal/config/backfill.go` | TEST-DDAE-10-001 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-10-002 | 2.6.0 | AC-DDAE-10-002 | bounded durable time windows | TASK-DDAE-10-002 | `path:internal/historyscan/adapters.go` | TEST-DDAE-10-002 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-10-003 | 2.6.0 | AC-DDAE-10-003 | bounded durable time windows | TASK-DDAE-10-003 | `path:internal/historyscan/scan.go` | TEST-DDAE-10-003 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-10-004 | 2.6.0 | AC-DDAE-10-004 | bounded durable time windows | TASK-DDAE-10-004 | `path:internal/historystate/store.go` | TEST-DDAE-10-004 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-10-005 | 2.6.0 | AC-DDAE-10-005 | bounded durable time windows | TASK-DDAE-10-005 | `path:internal/historyscan/adapters.go` | TEST-DDAE-10-005 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-10-006 | 2.6.0 | AC-DDAE-10-006 | bounded durable time windows | TASK-DDAE-10-006 | `path:internal/historyscan/scan.go` | TEST-DDAE-10-006 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-10-007 | 2.6.0 | AC-DDAE-10-007 | bounded durable time windows | TASK-DDAE-10-007 | `path:internal/historyscan/scan.go` | TEST-DDAE-10-007 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-10-008 | 2.6.0 | AC-DDAE-10-008 | bounded durable time windows | TASK-DDAE-10-004, TASK-DDAE-10-008 | `path:internal/historyscan/scan.go` | TEST-DDAE-10-008 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-10-009 | 2.6.0 | AC-DDAE-10-009 | bounded durable time windows | TASK-DDAE-10-009 | `path:internal/config/yaml.go` | TEST-DDAE-10-009 | `test` | `stage:test` | Implemented |

@@ -23,3 +23,13 @@ row as append-only. Record a later clarification, replacement, deprecation or
 behavior change in a new version row instead of rewriting historical dates,
 impact or test scope. An unapproved draft may be corrected in place only when
 no approval or retained evidence refers to it.
+
+> | `2026-09-09` | DDAE-8 | `2.3.0` | Cluster results-envelope compatibility and shared diagnostic parity | Authorized live cluster decode failure and requested parser-first fix | Preserve valid legacy arrays; reject null inventory; no metric/state/API changes | Synthetic format, boundary, normalized metric and replay coverage plus supplemental live diagnostics; release gates remain separate |
+
+| `2026-09-09` | DDAE-8 | `2.4.0` | Cluster object status, nested resources and integer CPU input | Further live field mismatch; user approved follow-up | Preserve legacy inputs/output contracts; reject mixed layouts; no state migration | Add field/quantity/parity/metric cases; reset impacted trace rows; external gates remain |
+
+The quoted DDAE-8 2.3.0 entry preserves the historical row verbatim. Harness 1.0.0 accepts one active table row per Change ID; the 2.4.0 row is active, while the prior full basis is archived under plans/history/.
+
+| 2026-09-09 | DDAE-9 | 2.5.0 | Query queue, duration and details | Explicit user approval | Default off, isolated state and topic | Synthetic boundary tests and authorized live diagnostics; external gates remain |
+
+| 2026-09-09 | DDAE-10 | 2.6.0 | Bounded log/query history backfill | Explicit user-approved candidate | Opt-in, durable progress, bounded-window readiness | Candidate acceptance matrix; external gates remain |

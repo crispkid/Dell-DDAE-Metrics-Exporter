@@ -8,7 +8,7 @@ data:
 
     monitoring:
       # Resources and alerts default to true; Serviceability Logs defaults to
-      # false. Keep at least one pipeline enabled.
+      # false. Queries also default to false. Keep at least one pipeline enabled.
       resources:
         enabled: true
         interval: 30s
@@ -23,6 +23,17 @@ data:
           max_per_cycle: 200
           concurrency: 4
       serviceability_logs:
+        backfill:
+          enabled: false
+          lookback: 24h
+          overlap: 2m
+          interval: 30s
+          cycle_timeout: 20s
+          rescan_interval: 1h
+          max_pages_per_cycle: 4
+          detail_max_per_cycle: 25
+          detail_concurrency: 2
+          max_pending_records: 10000
         enabled: false
         interval: 30s
         list_response_max_bytes: 8388608
@@ -31,6 +42,47 @@ data:
           refresh_interval: 10m
           max_per_cycle: 200
           concurrency: 4
+
+      queries:
+        backfill:
+          enabled: false
+          lookback: 24h
+          overlap: 2m
+          interval: 30s
+          cycle_timeout: 20s
+          rescan_interval: 1h
+          max_pages_per_cycle: 4
+          detail_max_per_cycle: 25
+          detail_concurrency: 2
+          max_pending_records: 10000
+        # Prometheus: concurrency, queue counts and observed duration histograms.
+        enabled: false
+        # Kafka: sanitized per-query details (including user); SQL is excluded.
+        events_enabled: false
+        base_url: https://insights.example.invalid
+        auth_url: https://identity.example.invalid
+        realm: ddae
+        # Replace with an authorized role that can view all queries.
+        role: monitoring
+        username_file: /run/secrets/query/username
+        password_file: /run/secrets/query/password
+        ca_file: /run/trust/insights-ca.pem
+        auth_ca_file: /run/trust/identity-ca.pem
+        insecure_skip_verify: false
+        kafka_topic: ddae-queries
+        interval: 30s
+        request_timeout: 5s
+        cycle_timeout: 20s
+        stale_after: 90s
+        response_max_bytes: 16777216
+        max_history_records: 1000
+        detail_max_per_cycle: 100
+        detail_concurrency: 4
+        retry_max: 2
+        checkpoint_retention: 720h
+        checkpoint_max_records: 100000
+        outbox_max_bytes: 268435456
+        outbox_max_events: 10000
 
     server:
       listen_address: 0.0.0.0:9469
@@ -68,6 +120,9 @@ data:
       client_id: ddae-exporter
       tls:
         ca_file: /run/trust/kafka-ca.pem
+        # Optional mTLS: set both paths to mounted files in /run/secrets/kafka.
+        client_cert_file: ""
+        client_key_file: ""
         # Target-scoped; never disables DDAE verification.
         insecure_skip_verify: false
       sasl:

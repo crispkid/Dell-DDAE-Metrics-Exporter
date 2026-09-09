@@ -15,6 +15,11 @@ Environment=DDAE_USERNAME_FILE=%d/ddae-username
 Environment=DDAE_PASSWORD_FILE=%d/ddae-password
 Environment=DDAE_CLIENT_SECRET_FILE=%d/ddae-client-secret
 Environment=KAFKA_SASL_PASSWORD_FILE=%d/kafka-password
+# To enable queries, uncomment these four lines and provision separate credentials.
+# LoadCredential=query-username:/etc/ddae-exporter/secrets/query-username
+# LoadCredential=query-password:/etc/ddae-exporter/secrets/query-password
+# Environment=QUERY_USERNAME_FILE=%d/query-username
+# Environment=QUERY_PASSWORD_FILE=%d/query-password
 ExecStart=/usr/local/bin/ddae-exporter --config /etc/ddae-exporter/config.yaml
 Restart=on-failure
 RestartSec=5s

@@ -28,6 +28,7 @@ type State interface {
 type Logger interface{ Error(string, ...any) }
 
 type Options struct {
+	BackfillEnabled bool
 	SourceInstance  string
 	Interval        time.Duration
 	CycleTimeout    time.Duration
@@ -37,6 +38,7 @@ type Options struct {
 }
 
 type Pipeline struct {
+	backfillEnabled bool
 	api             API
 	state           State
 	diagnostics     *snapshot.Store
@@ -59,7 +61,7 @@ type detailTask struct {
 
 func NewPipeline(api API, state State, diagnostics *snapshot.Store, options Options, logger Logger) *Pipeline {
 	return &Pipeline{
-		api: api, state: state, diagnostics: diagnostics,
+		api: api, state: state, diagnostics: diagnostics, backfillEnabled: options.BackfillEnabled,
 		sourceInstance: options.SourceInstance, interval: options.Interval,
 		cycleTimeout: options.CycleTimeout, refreshInterval: options.RefreshInterval,
 		maxPerCycle: options.MaxPerCycle, concurrency: options.Concurrency, logger: logger,
@@ -110,6 +112,7 @@ func (p *Pipeline) poll(parent context.Context) {
 		listed[item.ID] = struct{}{}
 		markers[item.ID] = usableMarker(item.UpdatedOn)
 	}
+	usable := complete && len(listed) == len(list.Results) && list.Threshold != nil && *list.Threshold > 0 && int64(len(listed)) <= *list.Threshold && *list.TotalRecords >= int64(len(listed))
 	if list.TotalRecords != nil && *list.TotalRecords > int64(len(listed)) {
 		complete = false
 	}
@@ -170,7 +173,7 @@ func (p *Pipeline) poll(parent context.Context) {
 	p.diagnostics.SetServiceabilityLogBuffered(events)
 	p.diagnostics.SetServiceabilityLogStateFull(full)
 	p.diagnostics.RecordServiceabilityLogDetail(detailSuccess && stateOK, detailDuration, deferred)
-	p.diagnostics.SetServiceabilityLogCollectionReady(complete && detailSuccess)
+	p.diagnostics.SetServiceabilityLogCollectionReady((complete || (p.backfillEnabled && usable)) && detailSuccess && stateOK)
 	if stateOK && detailSuccess {
 		p.diagnostics.SetServiceabilityLogPipelineStateHealthy(true)
 	}
@@ -254,7 +257,7 @@ func (p *Pipeline) fetchDetails(ctx context.Context, tasks []detailTask, observe
 					var event EncodedEvent
 					event, err = BuildEvent(p.sourceInstance, task.id, detail, observedAt)
 					if err == nil {
-						_, err = p.state.Enqueue(event, task.marker, observedAt)
+						_, err = p.state.Enqueue(event, detailMarker(detail.UpdatedOn, task.marker), observedAt)
 						stateErr = err != nil
 					}
 				}
@@ -303,4 +306,11 @@ func (p *Pipeline) logFailure(message, component string, err error) {
 	if p.logger != nil {
 		p.logger.Error(message, "component", component, "failure_class", observability.Classify(err))
 	}
+}
+
+func detailMarker(value *string, fallback string) string {
+	if marker := usableMarker(value); marker != "" {
+		return marker
+	}
+	return fallback
 }

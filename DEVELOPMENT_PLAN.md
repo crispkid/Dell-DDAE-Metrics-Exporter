@@ -261,3 +261,78 @@ Historical DDAE-6 approval bytes and unrelated product edits are preserved.
 ### Execution Plan Reference
 
 - Execution Plan: plans/DDAE-7.md
+
+## DDAE-8 Cluster response compatibility
+
+### Approval Record
+
+- Requirements Confirmed Status: confirmed
+- Requirements Confirmed By: Current repository user in this Codex conversation
+- Requirements Confirmer Role: Requesting user / Requirements Approver
+- Requirements Confirmed On: 2026-09-09
+- Requirements Confirmation Evidence: The user replied "OK" to the explicit requirements, plan and acceptance-test approval request for plans/DDAE-8.md, reviewed full-file SHA-256 d7ecdc502a366efd98b449ffa7d499a4f90014a7b2f7365d3964041e29a327e6. No personal name is inferred.
+- Implementation Plan Approved Status: approved
+- Implementation Plan Approved By: Current repository user in this Codex conversation
+- Implementation Plan Approver Role: Requesting user / Implementation Plan Approver
+- Implementation Plan Approved On: 2026-09-09
+- Implementation Plan Approval Evidence: The same explicit "OK" approves the linked plan and test scope. Canonical tables/headings are an administrative transcription of that reviewed candidate; no new product behavior was added. Canonical digests below are computed identities, not a claim that the user typed those digests.
+- Approved Specification Version: 2.4.0
+- Approved Specification Digest: sha256:8dfce0addfc5f134147cc3ff32e69c4282df545e056afd48c0fa84122f8c11f2
+- Approved Plan Basis Digest: sha256:47912619a1bc9b78d4059d1a4772b7f1dc5014afde051ea19e4c65b8501df5f7
+- Approved Test Plan Digest: sha256:aa5b5e0fb9a4f5a743dcc321a994ffb3997d68f3ce4cbebdd8f2c70c75442d51
+
+### Execution Plan Reference
+
+- Execution Plan: plans/DDAE-8.md
+
+The user then explicitly approved the field-mapping follow-up by replying
+"yes, keep going" on 2026-09-09. Reviewed candidate SHA-256:
+ac612ed932a340e9d3b23c26fc623d9937a56ebe0f484f51f30b0e3d439f3614.
+This approval covers the 2.4.0 requirements, plan and tests. The original
+2.3.0 canonical artifacts/approvals are preserved in plans/history/DDAE-8-v2.3.0.md.
+
+## DDAE-9 Query monitoring
+
+### Approval Record
+
+- Requirements Confirmed Status: confirmed
+- Requirements Confirmed By: Current repository user in this Codex conversation
+- Requirements Confirmer Role: Requesting user / Requirements Approver
+- Requirements Confirmed On: 2026-09-09
+- Requirements Confirmation Evidence: User replied OK after explicit candidate approval request and queue/output clarification; reviewed candidate SHA256 f0dbc5ac07d9e379c25dea6cd6b344bfc8aadec87f98ddacc189a06065fb067f.
+- Implementation Plan Approved Status: approved
+- Implementation Plan Approved By: Current repository user in this Codex conversation
+- Implementation Plan Approver Role: Requesting user / Implementation Plan Approver
+- Implementation Plan Approved On: 2026-09-09
+- Implementation Plan Approval Evidence: Same OK approves concrete linked candidate; canonical tables are administrative transcription, not an invented separate approval.
+- Approved Specification Version: 2.5.0
+- Approved Specification Digest: sha256:d594e28adcf41ca7f7e36378329dc550f8e04cdd14d7835717d82d757bb36eae
+- Approved Plan Basis Digest: sha256:c12691ce670d8314f464de311616dd85368ca3e6b2273baa208e8a4c7e33d620
+- Approved Test Plan Digest: sha256:eb239e98455e6fd5b33cbc839b1ac4b57976dac1cff0c11516b2b5f9369a0984
+
+### Execution Plan Reference
+
+- Execution Plan: plans/DDAE-9.md
+
+## DDAE-10 Bounded history backfill
+
+### Approval Record
+
+- Requirements Confirmed Status: confirmed
+- Requirements Confirmed By: Current repository user in this Codex conversation
+- Requirements Confirmer Role: Requesting user / Requirements Approver
+- Requirements Confirmed On: 2026-09-09
+- Requirements Confirmation Evidence: User replied OK to explicit approval request for plans/DDAE-10-history-backfill-candidate.md, SHA256 90950a41c5efbdec938a90515de99427a4a68f3fa4e0f144c021ecf7e0e046d1.
+- Implementation Plan Approved Status: approved
+- Implementation Plan Approved By: Current repository user in this Codex conversation
+- Implementation Plan Approver Role: Requesting user / Implementation Plan Approver
+- Implementation Plan Approved On: 2026-09-09
+- Implementation Plan Approval Evidence: Same explicit OK approves the linked requirements and plan; canonical records administratively transcribe that candidate.
+- Approved Specification Version: 2.6.0
+- Approved Specification Digest: sha256:29ba7cb11dcd15b2f24029c5dbf473a6fe3faee5f7dc75695109bf0408be40d1
+- Approved Plan Basis Digest: sha256:6410598f3888a21944760028102225b5325864d4ee19c900b8d47c78dd091430
+- Approved Test Plan Digest: sha256:54d90e0e1e16d33a95026f742922fb2f3a7ff1d9bc445a55d11cf3a43105a003
+
+### Execution Plan Reference
+
+- Execution Plan: plans/DDAE-10.md

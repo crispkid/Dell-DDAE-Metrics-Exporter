@@ -152,6 +152,9 @@ func (s *Store) Enqueue(event serviceability.EncodedEvent, marker string, observ
 			}
 			checkpoint.LogID = event.Event.LogID
 		}
+		if olderMarker(marker, checkpoint.ListMarker) {
+			return nil
+		}
 		checkpoint.LastSeenAt = observedAt.UnixNano()
 		checkpoint.LastFetchedAt = observedAt.UnixNano()
 		checkpoint.ListMarker = marker
@@ -210,7 +213,9 @@ func (s *Store) MarkSeen(logID, marker string, observedAt time.Time) error {
 			}
 			checkpoint.LogID = logID
 		}
-		checkpoint.ListMarker = marker
+		if !olderMarker(marker, checkpoint.ListMarker) {
+			checkpoint.ListMarker = marker
+		}
 		checkpoint.LastSeenAt = observedAt.UnixNano()
 		checkpoint.AbsentSince = 0
 		return putCheckpoint(bucket, checkpoint)
@@ -560,4 +565,10 @@ func validHash(value string) bool {
 		}
 	}
 	return true
+}
+
+func olderMarker(incoming, previous string) bool {
+	old, e1 := time.Parse(time.RFC3339Nano, previous)
+	next, e2 := time.Parse(time.RFC3339Nano, incoming)
+	return e1 == nil && e2 == nil && next.Before(old)
 }

@@ -265,3 +265,10 @@ func (p *Publisher) log(err error) {
 		p.logger.Error("Kafka publisher failed", "component", "kafka", "failure_class", observability.Classify(err))
 	}
 }
+
+func NewQueryProducer(cfg config.Config) (*Producer, error) {
+	return newProducerForTopic(cfg, cfg.Query.Topic)
+}
+func (p *Producer) PublishQuery(ctx context.Context, key, payload []byte) error {
+	return p.publish(ctx, key, payload, "query")
+}

@@ -450,3 +450,71 @@ while retaining all current checks. The existing test stage remains
 race-enabled. TEST-DDAE-7-013 and TEST-DDAE-7-014 must have real executable
 entry points wired into E2E/integration stages, but are not executed or closed
 by this local pass. Missing external prerequisites remain blocked gates.
+
+## DDAE-8 Test Design
+
+| Test ID | Acceptance ID | Requirement ID | Test implementation | Level | Fixture/data | Expected pre-implementation state | Harness stage |
+|---|---|---|---|---|---|---|---|
+| TEST-DDAE-8-001 | AC-DDAE-8-001 | REQ-DDAE-8-001 | `path:internal/ddae/cluster_response_test.go` | component | synthetic TLS arrays/envelopes, empty/populated | envelope fails existing decoder | `test` |
+| TEST-DDAE-8-002 | AC-DDAE-8-002 | REQ-DDAE-8-002 | `path:internal/ddae/cluster_response_test.go` | boundary | missing/null/wrong types, invalid items, malformed/trailing/oversized JSON | null can be accepted; envelope unsupported | `test` |
+| TEST-DDAE-8-003 | AC-DDAE-8-001 | REQ-DDAE-8-001 | `path:internal/collector/cluster_response_test.go` | component | equivalent values and invalid identity/optional resources | envelope cannot reach normalization | `test` |
+| TEST-DDAE-8-004 | AC-DDAE-8-003 | REQ-DDAE-8-003 | `path:internal/portable/parser_test.go` | component | production recorded-body parity and synthetic self-test expectations | portable contract expects envelope failure | `test` |
+
+| TEST-DDAE-8-005 | AC-DDAE-8-004 | REQ-DDAE-8-004 | `path:internal/ddae/cluster_response_test.go` | component | synthetic legacy/object/nested and malformed/mixed cases | object status unsupported and nested quantities omitted | `test` |
+| TEST-DDAE-8-006 | AC-DDAE-8-005 | REQ-DDAE-8-005 | `path:internal/collector/cluster_response_test.go` | component | synthetic legacy/object/nested and malformed/mixed cases | object status unsupported and nested quantities omitted | `test` |
+| TEST-DDAE-8-007 | AC-DDAE-8-006 | REQ-DDAE-8-006 | `path:internal/portable/parser_test.go` | component | synthetic legacy/object/nested and malformed/mixed cases | object status unsupported and nested quantities omitted | `test` |
+
+### Failure and Boundary Coverage
+
+Use the approved matrix in plans/DDAE-8.md: populated/empty arrays and envelopes,
+whitespace/unknown metadata, invalid top levels/results/items, malformed and
+trailing JSON, response bounds, identities, and optional resource errors.
+Compare exact normalized cluster and metric values, and retain honest failure.
+Run targeted tests, repository race tests, lint, coverage, build and full verify.
+Retain failed/unavailable stages explicitly; no mock proves real integration.
+Two authorized live resource cycles are supplemental diagnostic evidence only.
+
+Approved 2.4.0 additions cover required object status, nested resources,
+non-negative integer and quantity-string CPU, wrong types/numeric forms, mixed
+layout rejection, missing optional values, ignored metadata and exact metric
+parity. The previous numeric CPU rejection is intentionally superseded.
+
+## Verification Record Location
+
+Current execution results and limits are retained in plans/DDAE-8.md.
+
+## DDAE-9 Test Plan
+
+| Test | Acceptance | Requirement | Implementation | Kind | Cases | Prior state | Stage |
+|---|---|---|---|---|---|---|---|
+| TEST-DDAE-9-001 | AC-DDAE-9-001 | REQ-DDAE-9-001 | `path:internal/config/query_test.go` | component | approved candidate failure/success boundaries | query pipeline absent | `test` |
+| TEST-DDAE-9-002 | AC-DDAE-9-002 | REQ-DDAE-9-002 | `path:internal/queryclient/client_test.go` | component | approved candidate failure/success boundaries | query pipeline absent | `test` |
+| TEST-DDAE-9-003 | AC-DDAE-9-003 | REQ-DDAE-9-003 | `path:internal/queryclient/client_test.go` | component | approved candidate failure/success boundaries | query pipeline absent | `test` |
+| TEST-DDAE-9-004 | AC-DDAE-9-004 | REQ-DDAE-9-004 | `path:internal/queries/pipeline_test.go` | component | approved candidate failure/success boundaries | query pipeline absent | `test` |
+| TEST-DDAE-9-005 | AC-DDAE-9-005 | REQ-DDAE-9-005 | `path:internal/queries/pipeline_test.go` | component | approved candidate failure/success boundaries | query pipeline absent | `test` |
+| TEST-DDAE-9-006 | AC-DDAE-9-006 | REQ-DDAE-9-006 | `path:internal/queryclient/types_test.go` | component | approved candidate failure/success boundaries | query pipeline absent | `test` |
+| TEST-DDAE-9-007 | AC-DDAE-9-007 | REQ-DDAE-9-007 | `path:internal/querystate/store_test.go` | component | approved candidate failure/success boundaries | query pipeline absent | `test` |
+| TEST-DDAE-9-008 | AC-DDAE-9-008 | REQ-DDAE-9-008 | `path:internal/queries/pipeline_test.go` | component | approved candidate failure/success boundaries | query pipeline absent | `test` |
+| TEST-DDAE-9-009 | AC-DDAE-9-009 | REQ-DDAE-9-009 | `path:internal/contract/query_test.go` | component | approved candidate failure/success boundaries | query pipeline absent | `test` |
+
+### Failure and Boundary Coverage
+
+Full matrix in plans/DDAE-9.md and immutable candidate. Include source-bounded redirect authentication, stale/invalid/partial data, privacy, persistent dedup and backpressure; real integration remains separate.
+
+## DDAE-10 Test Plan
+
+| Test | Acceptance | Requirement | Implementation | Kind | Cases | Prior state | Stage |
+|---|---|---|---|---|---|---|---|
+| TEST-DDAE-10-001 | AC-DDAE-10-001 | REQ-DDAE-10-001 | `path:internal/config/backfill_test.go` | component | immutable approved candidate matrix | no time-filter/backfill progress support | `test` |
+| TEST-DDAE-10-002 | AC-DDAE-10-002 | REQ-DDAE-10-002 | `path:internal/historyscan/adapters_test.go` | component | immutable approved candidate matrix | no time-filter/backfill progress support | `test` |
+| TEST-DDAE-10-003 | AC-DDAE-10-003 | REQ-DDAE-10-003 | `path:internal/historyscan/scan_test.go` | component | immutable approved candidate matrix | no time-filter/backfill progress support | `test` |
+| TEST-DDAE-10-004 | AC-DDAE-10-004 | REQ-DDAE-10-004 | `path:internal/historystate/store_test.go` | component | immutable approved candidate matrix | no time-filter/backfill progress support | `test` |
+| TEST-DDAE-10-005 | AC-DDAE-10-005 | REQ-DDAE-10-005 | `path:internal/historyscan/replay_test.go` | component | immutable approved candidate matrix | no time-filter/backfill progress support | `test` |
+| TEST-DDAE-10-006 | AC-DDAE-10-006 | REQ-DDAE-10-006 | `path:internal/historyscan/worker_test.go` | component | immutable approved candidate matrix | no time-filter/backfill progress support | `test` |
+| TEST-DDAE-10-007 | AC-DDAE-10-007 | REQ-DDAE-10-007 | `path:internal/historyscan/metrics_test.go` | component | immutable approved candidate matrix | no time-filter/backfill progress support | `test` |
+| TEST-DDAE-10-008 | AC-DDAE-10-008 | REQ-DDAE-10-008 | `path:internal/historyscan/recovery_test.go` | component | immutable approved candidate matrix | no time-filter/backfill progress support | `test` |
+| TEST-DDAE-10-009 | AC-DDAE-10-009 | REQ-DDAE-10-009 | `path:internal/config/examples_test.go` | component | immutable approved candidate matrix | no time-filter/backfill progress support | `test` |
+
+### Failure and Boundary Coverage
+
+Use the immutable approved DDAE-10 candidate and plan matrix: caps, timestamp ties, overlap, replay, crashes, unknown schema, scope/TLS, concurrency, stale/readiness, privacy and recovery. Real integration evidence remains separate.

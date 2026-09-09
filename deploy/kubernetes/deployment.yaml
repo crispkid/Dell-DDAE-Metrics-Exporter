@@ -81,6 +81,9 @@ spec:
             - name: ddae-credentials
               mountPath: /run/secrets/ddae
               readOnly: true
+            - name: query-credentials
+              mountPath: /run/secrets/query
+              readOnly: true
             - name: kafka-credentials
               mountPath: /run/secrets/kafka
               readOnly: true
@@ -98,6 +101,12 @@ spec:
         - name: ddae-credentials
           secret:
             secretName: ddae-exporter-credentials
+            defaultMode: 0440
+        - name: query-credentials
+          secret:
+            secretName: ddae-exporter-query
+            # Queries are disabled by default; enabling requires username/password.
+            optional: true
             defaultMode: 0440
         - name: kafka-credentials
           secret:

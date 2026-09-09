@@ -147,9 +147,9 @@ func (c *Client) Ping(ctx context.Context) (PingResponse, error) {
 }
 
 func (c *Client) Clusters(ctx context.Context) ([]Cluster, error) {
-	var result []Cluster
+	var result clusterList
 	err := c.getJSON(ctx, "clusters", c.routes.clusters, c.responseLimit, &result)
-	return result, err
+	return []Cluster(result), err
 }
 
 func (c *Client) Nodes(ctx context.Context) ([]InfrastructureNode, error) {
@@ -210,14 +210,14 @@ func (c *Client) getJSON(ctx context.Context, operation, path string, limit int6
 	return c.getJSONRawPath(ctx, operation, path, "", limit, destination)
 }
 
-func (c *Client) getJSONRawPath(ctx context.Context, operation, path, rawPath string, limit int64, destination any) error {
+func (c *Client) getJSONRawPath(ctx context.Context, operation, path, rawPath string, limit int64, destination any, query ...url.Values) error {
 	lease, err := c.tokens.get(ctx, 0)
 	if err != nil {
 		return err
 	}
 	authRetried := false
 	for attempt := 0; attempt <= c.retryMax; attempt++ {
-		status, err := c.doGET(ctx, operation, path, rawPath, lease.token, limit, destination)
+		status, err := c.doGET(ctx, operation, path, rawPath, lease.token, limit, destination, query...)
 		if status == http.StatusUnauthorized {
 			if authRetried {
 				return &Error{class: observability.ClassAuth, op: operation, status: status}
@@ -243,12 +243,15 @@ func (c *Client) getJSONRawPath(ctx context.Context, operation, path, rawPath st
 	return &Error{class: observability.ClassInternal, op: operation}
 }
 
-func (c *Client) doGET(ctx context.Context, operation, path, rawPath, token string, limit int64, destination any) (int, error) {
+func (c *Client) doGET(ctx context.Context, operation, path, rawPath, token string, limit int64, destination any, query ...url.Values) (int, error) {
 	requestContext, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 	target := cloneURL(c.baseURL)
 	target.Path = path
 	target.RawPath = rawPath
+	if len(query) > 0 {
+		target.RawQuery = query[0].Encode()
+	}
 	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, target.String(), nil)
 	if err != nil {
 		return 0, &Error{class: observability.ClassInternal, op: operation}
@@ -367,4 +370,17 @@ func transportFailureClass(err error, ctx context.Context) observability.Class {
 		return observability.ClassTLS
 	}
 	return observability.ClassTransport
+}
+
+// ServiceabilityLogWindow only permits inclusive, typed update-time bounds.
+func (c *Client) ServiceabilityLogWindow(ctx context.Context, start, end time.Time) (ServiceabilityLogList, error) {
+	var result ServiceabilityLogList
+	if start.IsZero() || !end.After(start) {
+		return result, fmt.Errorf("invalid history time bounds")
+	}
+	start = start.UTC().Truncate(time.Second)
+	end = end.UTC().Add(time.Second - time.Nanosecond).Truncate(time.Second)
+	filter := fmt.Sprintf("(updatetime ge \"%s\") and (updatetime le \"%s\")", start.Format(time.RFC3339), end.Format(time.RFC3339))
+	err := c.getJSONRawPath(ctx, "serviceability_log_list", c.routes.serviceabilityLogList, "", c.serviceabilityLogListLimit, &result, url.Values{"filter": {filter}})
+	return result, err
 }

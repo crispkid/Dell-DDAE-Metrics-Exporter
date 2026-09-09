@@ -198,3 +198,13 @@ Use `DDAE_E2E_CA_FILE` and the optional paired
 `DDAE_E2E_CLIENT_CERT_FILE`/`DDAE_E2E_CLIENT_KEY_FILE` for the external mTLS
 boundary. The E2E client deliberately has no insecure option; evidence from an
 exporter instance running with either target's insecure TLS mode is ineligible.
+
+## Query monitoring operations
+
+Use [Query monitoring](query-monitoring.md) for independent credentials, role scope,
+Insights/identity-provider egress, durable query state and Kafka recovery. Existing
+resource/alert/log settings are unchanged.
+
+## Bounded history recovery
+
+See [history backfill](history-backfill.md) for opt-in settings, combined foreground/background request budgets, retention gaps, readiness, state recovery and rollback. Preserve history-backfill.db together with the existing event databases.

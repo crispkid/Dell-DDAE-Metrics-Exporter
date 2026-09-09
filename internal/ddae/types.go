@@ -19,9 +19,137 @@ type Cluster struct {
 	Worker        ResourceConfig `json:"worker"`
 }
 
+// UnmarshalJSON maps wire variants into the stable DTO used by normalizers.
+func (c *Cluster) UnmarshalJSON(data []byte) error {
+	body := bytes.TrimSpace(data)
+	if len(body) == 0 || body[0] != '{' {
+		return errors.New("cluster must be an object")
+	}
+	var wire struct {
+		ID          string          `json:"id"`
+		Status      json.RawMessage `json:"clusterStatus"`
+		Coordinator ResourceConfig  `json:"coordinator"`
+		Worker      ResourceConfig  `json:"worker"`
+	}
+	if err := json.Unmarshal(body, &wire); err != nil {
+		return err
+	}
+	var status string
+	raw := bytes.TrimSpace(wire.Status)
+	if !isMissingOrNull(raw) {
+		if raw[0] == '{' {
+			var object struct {
+				Status *string `json:"status"`
+			}
+			if err := json.Unmarshal(raw, &object); err != nil {
+				return err
+			}
+			if object.Status == nil {
+				return errors.New("cluster status object requires status")
+			}
+			status = *object.Status
+		} else if err := json.Unmarshal(raw, &status); err != nil {
+			return err
+		}
+	}
+	*c = Cluster{ID: wire.ID, ClusterStatus: status, Coordinator: wire.Coordinator, Worker: wire.Worker}
+	return nil
+}
+
+// clusterList accepts both API envelope and legacy array responses. Keep this
+// decoder shared by live collection and recorded-body replay.
+type clusterList []Cluster
+
+func (l *clusterList) UnmarshalJSON(data []byte) error {
+	body := bytes.TrimSpace(data)
+	if len(body) == 0 {
+		return errors.New("cluster response is empty")
+	}
+	if body[0] == '{' {
+		var envelope struct {
+			Results json.RawMessage `json:"results"`
+		}
+		if err := json.Unmarshal(body, &envelope); err != nil {
+			return err
+		}
+		body = bytes.TrimSpace(envelope.Results)
+	}
+	if len(body) == 0 || body[0] != '[' {
+		return errors.New("cluster response requires an array")
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(body, &items); err != nil {
+		return err
+	}
+	clusters := make([]Cluster, 0, len(items))
+	for _, item := range items {
+		item = bytes.TrimSpace(item)
+		if len(item) == 0 || item[0] != '{' {
+			return errors.New("cluster must be an object")
+		}
+		var cluster Cluster
+		if err := json.Unmarshal(item, &cluster); err != nil {
+			return err
+		}
+		clusters = append(clusters, cluster)
+	}
+	*l = clusters
+	return nil
+}
+
 type ResourceConfig struct {
 	CPU    *string `json:"cpu"`
 	Memory *string `json:"memory"`
+}
+
+// UnmarshalJSON keeps resource layout selection explicit so mixed forms cannot
+// silently override each other. Optional legacy null values remain absent.
+func (r *ResourceConfig) UnmarshalJSON(data []byte) error {
+	body := bytes.TrimSpace(data)
+	if bytes.Equal(body, []byte("null")) {
+		*r = ResourceConfig{}
+		return nil
+	}
+	if len(body) == 0 || body[0] != '{' {
+		return errors.New("cluster resources must be an object")
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return err
+	}
+	if nested, ok := fields["resources"]; ok {
+		_, directCPU := fields["cpu"]
+		_, directMemory := fields["memory"]
+		if directCPU || directMemory {
+			return errors.New("mixed cluster resource layouts")
+		}
+		nested = bytes.TrimSpace(nested)
+		if len(nested) == 0 || nested[0] != '{' {
+			return errors.New("nested cluster resources must be an object")
+		}
+		var selected map[string]json.RawMessage
+		if err := json.Unmarshal(nested, &selected); err != nil {
+			return err
+		}
+		fields = selected
+	}
+	var result ResourceConfig
+	if cpu, ok := fields["cpu"]; ok && !isMissingOrNull(cpu) {
+		value, err := decodeNodeCPU(cpu)
+		if err != nil {
+			return errors.New("cluster CPU must be an integer or quantity string")
+		}
+		result.CPU = value
+	}
+	if memory, ok := fields["memory"]; ok {
+		value, err := decodeOptionalJSONString(memory)
+		if err != nil {
+			return errors.New("cluster memory must be a quantity string")
+		}
+		result.Memory = value
+	}
+	*r = result
+	return nil
 }
 
 type InfrastructureNode struct {

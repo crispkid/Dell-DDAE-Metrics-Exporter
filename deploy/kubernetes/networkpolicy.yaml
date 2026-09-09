@@ -11,5 +11,6 @@ spec:
   egress: []
 
 # This committed policy intentionally denies all traffic. The operator must add
-# site-specific policies for DNS, the single DDAE origin, Kafka brokers, and an
+# site-specific policies for DNS, the DDAE Management origin, enabled query
+# Insights and identity-provider origins, Kafka brokers, and an
 # mTLS-protected Prometheus path; private IPs are never committed here.
