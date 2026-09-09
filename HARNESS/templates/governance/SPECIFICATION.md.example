@@ -1,0 +1,67 @@
+# Specification
+
+## {{REPLACE_ME:CHANGE_ID}} {{REPLACE_ME:CHANGE_TITLE}}
+
+### Specification Metadata
+
+- Specification Version: `{{REPLACE_ME:SEMVER}}`
+- Status: active
+- Owner: `{{REPLACE_ME:SPEC_OWNER}}`
+- Clarification Status: pending
+
+Version this specification according to the adopted project policy: use a
+patch for a non-behavioral clarification, a minor version for backward-compatible
+new behavior, and a major version for incompatible behavior or removal. Do not
+reuse a released or verified requirement or acceptance ID for different
+behavior; preserve the old ID and record its replacement or deprecation.
+
+### Problem Statement
+
+`{{REPLACE_ME:PROBLEM_AND_OBSERVABLE_IMPACT}}`
+
+### Goals
+
+- `{{REPLACE_ME:GOAL}}`
+
+### Non-goals
+
+- `{{REPLACE_ME:NON_GOAL}}`
+
+### Actors and Scenarios
+
+- Actor `{{REPLACE_ME:ACTOR}}` needs `{{REPLACE_ME:SCENARIO_AND_OUTCOME}}`.
+
+### Requirement Index
+
+| Requirement ID | Priority | Normative requirement | Acceptance IDs |
+|---|---|---|---|
+| REQ-{{REPLACE_ME:CHANGE_ID}}-001 | must | The system MUST `{{REPLACE_ME:NORMATIVE_BEHAVIOR}}`. | AC-{{REPLACE_ME:CHANGE_ID}}-001 |
+
+### Acceptance Criteria
+
+| Acceptance ID | Requirement ID | Given | When | Then |
+|---|---|---|---|---|
+| AC-{{REPLACE_ME:CHANGE_ID}}-001 | REQ-{{REPLACE_ME:CHANGE_ID}}-001 | `{{REPLACE_ME:PRECONDITION}}` | `{{REPLACE_ME:ACTION}}` | `{{REPLACE_ME:OBSERVABLE_RESULT}}` |
+
+### Interfaces, Data, and Failure Behavior
+
+`{{REPLACE_ME:INTERFACES_DATA_ERRORS_RECOVERY}}`
+
+### Quality Attributes
+
+`{{REPLACE_ME:SECURITY_PERFORMANCE_ACCESSIBILITY_OBSERVABILITY}}`
+
+### Compatibility and Migration
+
+`{{REPLACE_ME:COMPATIBILITY_MIGRATION_ROLLBACK}}`
+
+### Assumptions
+
+- `{{REPLACE_ME:ASSUMPTION}}`
+
+Use exactly `- None.` below only after every material question is resolved and
+the decision or assumption is recorded in the specification.
+
+### Open Questions
+
+- {{REPLACE_ME:OPEN_QUESTIONS_OR_NONE}}

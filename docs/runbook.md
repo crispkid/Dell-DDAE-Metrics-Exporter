@@ -109,6 +109,7 @@ authorization.
 | Authentication failures | Confirm credential files exist and are readable; inspect only the bounded `auth` class | Correct/rotate the dedicated identity; never print token or password values |
 | TLS failures | Check CA mount and hostname against the certificate | Replace the approved CA/certificate; guarded insecure diagnosis requires explicit approval and its output is never release evidence |
 | Management API returns 404 | Compare the configured Ping/API prefixes with the gateway's documented route namespace and sanitized ingress/service observations | Correct `ddae.paths.ping_prefix` or `ddae.paths.api_prefix` and restart; do not add fallback routes, change fixed suffixes or treat a 401 as response-schema proof |
+| Node collector reports a decode failure | Confirm the response is either a Dell 1.5.0 `results` envelope or the supported legacy array; inspect only sanitized field types and names | Correct the API/gateway response contract; do not log the raw node inventory or coerce malformed values to zero |
 | One collector fails | Inspect its bounded failure class and snapshot age | Validate only its fixed GET route/shape; do not add fallback routes or generic decoding |
 | Alert list incomplete | Compare the sanitized count relationship in the authorized environment | Stop release, confirm enumeration behavior, and amend the specification if pagination is required |
 | Serviceability Log list incomplete | Observe the fixed completeness/deferred metrics and sanitized counts in an authorized environment | Keep the logs pipeline not ready, retain safe IDs for bounded processing, and confirm Dell list semantics before release |
@@ -120,6 +121,13 @@ authorization.
 Logs expose component and bounded failure class, not raw server errors. A
 failure that requires response-body inspection must be reproduced with
 authorized, separately controlled diagnostic tooling.
+
+Node decoding supports the documented `results` envelope, integer CPU,
+`ephemeralStorage` and object conditions, plus the prior bare-array, quantity
+string, `ephemeral-storage` and condition-array forms. Serviceability lists
+remain indexes for their `/{id}` detail operations. If `totalRecords` exceeds
+the unique valid returned IDs, do not treat the list as complete and do not add
+undocumented pagination parameters.
 
 ## Upgrade, rollback and recovery
 

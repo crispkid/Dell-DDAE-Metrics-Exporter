@@ -1,0 +1,87 @@
+# Execution Plans
+
+Copy this file to `PLANS.md` when the repository uses multi-hour or
+multi-session execution plans. Store active plans in the project-designated
+location, for example `plans/<change-id>.md`.
+
+<!-- PORTABLE_PLAN_TEMPLATE -->
+
+Remove this marker when adopting the file.
+
+An execution plan is a self-contained living document. A new contributor must
+be able to resume the work from the plan, repository, and recorded evidence
+without relying on missing conversation history.
+
+This is the only detailed implementation plan for a change. When formal
+governance is enabled, `DEVELOPMENT_PLAN.md` stores approval metadata and links
+to this file; do not duplicate progress, decisions, steps, or verification in
+both places.
+
+Continue the same plan only for the same unfinished observable outcome. Use a
+new Change ID and a new plan for a materially different, closed, released, or
+independently approved outcome. If implementation reveals a behavior, design,
+or acceptance-test change, record the discovery, pause delivery work, update
+the governed source and approval digests, and obtain the required renewed
+approval before continuing. Isolated exploration is not deliverable
+implementation or acceptance evidence.
+
+## Required Plan Sections
+
+```markdown
+# {{REPLACE_ME:CHANGE_ID}} {{REPLACE_ME:ACTION_ORIENTED_OUTCOME}}
+
+## Purpose and Observable Outcome
+{{REPLACE_ME:PURPOSE_AND_OBSERVABLE_OUTCOME}}
+
+## Context and Constraints
+{{REPLACE_ME:CONTEXT_AND_CONSTRAINTS}}
+
+<!-- SDD_APPROVED_PLAN_BASIS_BEGIN -->
+## Approved Plan Basis
+
+### Requirement Coverage
+{{REPLACE_ME:REQUIREMENT_COVERAGE}}
+
+### Technical Design
+{{REPLACE_ME:TECHNICAL_DESIGN}}
+
+### Task Breakdown
+| Task ID | Requirement IDs | Dependencies | Files/components | Verification |
+|---|---|---|---|---|
+| TASK-{{REPLACE_ME:CHANGE_ID}}-001 | REQ-{{REPLACE_ME:CHANGE_ID}}-001 | none | {{REPLACE_ME:FILES_OR_COMPONENTS}} | TEST-{{REPLACE_ME:CHANGE_ID}}-001 |
+
+### Verification Basis
+{{REPLACE_ME:VERIFICATION_BASIS}}
+<!-- SDD_APPROVED_PLAN_BASIS_END -->
+
+## Progress
+- [ ] {{REPLACE_ME:TIMESTAMPED_PROGRESS}}
+
+## Surprises and Discoveries
+- {{REPLACE_ME:SURPRISES_AND_DISCOVERIES}}
+
+## Decision Log
+- {{REPLACE_ME:DECISION_LOG}}
+
+## Recovery and Idempotence
+{{REPLACE_ME:RECOVERY_AND_IDEMPOTENCE}}
+
+## Outcomes and Retrospective
+{{REPLACE_ME:OUTCOMES_AND_RETROSPECTIVE}}
+```
+
+Update `Progress`, discoveries, decisions, and verification at every meaningful
+stopping point. Do not mark an item complete based only on an implementation
+claim; record the observable evidence. Never place secrets or sensitive
+production data in a plan.
+
+For each material uncertainty, record the issue and evidence, viable options,
+their consequences, the recommended option and rationale, and the named
+decision owner. Record the owner's actual decision separately; do not present a
+recommendation as approval.
+
+For required SDD, the bytes from `SDD_APPROVED_PLAN_BASIS_BEGIN` through
+`SDD_APPROVED_PLAN_BASIS_END` form the approved plan basis. Do not edit that
+block after approval without recalculating its digest and obtaining renewed
+approval. Living progress, discoveries, decisions, and outcomes remain outside
+the block and may be updated without changing the approved basis.

@@ -1,0 +1,25 @@
+# GitHub Actions Security Guidance
+
+This starter is guidance, not an enforced policy by itself. Adapt the applicable
+rules to the repository and enforce them through the project's
+`HARNESS_CI_POLICY_COMMAND` and `HARNESS_SUPPLY_CHAIN_COMMAND`.
+
+- Set workflow-level `GITHUB_TOKEN` permissions to read-only, then increase
+  permissions only for the job that requires them.
+- Pin third-party actions and reusable workflows to reviewed full-length commit
+  SHAs. Record the human-readable release in a comment or dependency update
+  configuration.
+- Prefer OIDC/workload identity for cloud access instead of long-lived cloud
+  credentials.
+- Never interpolate untrusted issue, pull-request, branch, or commit content
+  directly into shell scripts.
+- Separate untrusted pull-request checks from privileged release/deployment
+  workflows and environments.
+- Protect deployment environments with the project's approval and branch rules.
+- Produce and retain project-required checksums, SBOMs, provenance, signatures,
+  test reports, and scan results.
+- Redact logs and artifacts and set explicit retention periods.
+
+Suggested project tools include a workflow linter, a GitHub Actions security
+scanner, a secret scanner, an SBOM generator, and provenance verification. The
+portable harness deliberately delegates tool selection to the project.

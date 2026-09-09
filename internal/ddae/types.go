@@ -32,10 +32,198 @@ type InfrastructureNode struct {
 	Conditions  []NodeCondition    `json:"conditions"`
 }
 
+func (n *InfrastructureNode) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return errors.New("node must be an object")
+	}
+	var wire struct {
+		ID          string             `json:"id"`
+		State       string             `json:"state"`
+		Capacity    ResourceQuantities `json:"capacity"`
+		Allocatable ResourceQuantities `json:"allocatable"`
+		Conditions  json.RawMessage    `json:"conditions"`
+	}
+	if err := json.Unmarshal(trimmed, &wire); err != nil {
+		return err
+	}
+	conditions, err := decodeNodeConditions(wire.Conditions)
+	if err != nil {
+		return err
+	}
+	*n = InfrastructureNode{
+		ID: wire.ID, State: wire.State, Capacity: wire.Capacity,
+		Allocatable: wire.Allocatable, Conditions: conditions,
+	}
+	return nil
+}
+
+type infrastructureNodeList []InfrastructureNode
+
+func (l *infrastructureNodeList) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return errors.New("node response is empty")
+	}
+	var nodes []InfrastructureNode
+	switch trimmed[0] {
+	case '[':
+		if err := json.Unmarshal(trimmed, &nodes); err != nil {
+			return err
+		}
+	case '{':
+		var envelope map[string]json.RawMessage
+		if err := json.Unmarshal(trimmed, &envelope); err != nil {
+			return err
+		}
+		results, present := envelope["results"]
+		if !present || isMissingOrNull(results) {
+			return errors.New("node response results are missing")
+		}
+		if err := json.Unmarshal(results, &nodes); err != nil {
+			return err
+		}
+	default:
+		return errors.New("unsupported node response shape")
+	}
+	*l = nodes
+	return nil
+}
+
 type ResourceQuantities struct {
 	CPU              *string `json:"cpu"`
 	Memory           *string `json:"memory"`
 	EphemeralStorage *string `json:"ephemeral-storage"`
+}
+
+func (q *ResourceQuantities) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return errors.New("node resources must be an object")
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &fields); err != nil {
+		return err
+	}
+	var decoded ResourceQuantities
+	if raw, present := fields["cpu"]; present {
+		cpu, err := decodeNodeCPU(raw)
+		if err != nil {
+			return err
+		}
+		decoded.CPU = cpu
+	}
+	if raw, present := fields["memory"]; present {
+		memory, err := decodeOptionalJSONString(raw)
+		if err != nil {
+			return err
+		}
+		decoded.Memory = memory
+	}
+	documented, documentedPresent := fields["ephemeralStorage"]
+	legacy, legacyPresent := fields["ephemeral-storage"]
+	var documentedValue, legacyValue *string
+	var err error
+	if documentedPresent {
+		documentedValue, err = decodeOptionalJSONString(documented)
+		if err != nil {
+			return err
+		}
+	}
+	if legacyPresent {
+		legacyValue, err = decodeOptionalJSONString(legacy)
+		if err != nil {
+			return err
+		}
+	}
+	if documentedPresent && legacyPresent && !optionalStringsEqual(documentedValue, legacyValue) {
+		return errors.New("conflicting ephemeral storage aliases")
+	}
+	if documentedPresent {
+		decoded.EphemeralStorage = documentedValue
+	} else if legacyPresent {
+		decoded.EphemeralStorage = legacyValue
+	}
+	*q = decoded
+	return nil
+}
+
+func decodeNodeCPU(data json.RawMessage) (*string, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, errors.New("node CPU is missing")
+	}
+	if trimmed[0] == '"' {
+		return decodeOptionalJSONString(trimmed)
+	}
+	for _, character := range trimmed {
+		if character < '0' || character > '9' {
+			return nil, errors.New("node CPU must be an integer or quantity string")
+		}
+	}
+	value := string(trimmed)
+	return &value, nil
+}
+
+func decodeOptionalJSONString(data json.RawMessage) (*string, error) {
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+	var value string
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return nil, errors.New("node quantity or condition must be a string")
+	}
+	return &value, nil
+}
+
+func optionalStringsEqual(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func decodeNodeConditions(data json.RawMessage) ([]NodeCondition, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+	if trimmed[0] == '[' {
+		var conditions []NodeCondition
+		if err := json.Unmarshal(trimmed, &conditions); err != nil {
+			return nil, err
+		}
+		return conditions, nil
+	}
+	if trimmed[0] != '{' {
+		return nil, errors.New("node conditions must be an object or array")
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &fields); err != nil {
+		return nil, err
+	}
+	conditions := make([]NodeCondition, 0, 2)
+	for _, field := range []struct {
+		name     string
+		typeName string
+	}{
+		{name: "diskPressure", typeName: "DiskPressure"},
+		{name: "memoryPressure", typeName: "MemoryPressure"},
+	} {
+		raw, present := fields[field.name]
+		if !present {
+			continue
+		}
+		status, err := decodeOptionalJSONString(raw)
+		if err != nil {
+			return nil, err
+		}
+		if status != nil {
+			conditions = append(conditions, NodeCondition{Type: field.typeName, Status: *status})
+		}
+	}
+	return conditions, nil
 }
 
 type NodeCondition struct {

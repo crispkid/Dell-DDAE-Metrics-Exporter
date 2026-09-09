@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:portable-harness:schema:latest-pointer:1",
+  "title": "Portable Harness Latest Run Pointer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "run_type",
+    "report_path",
+    "report_digest",
+    "report_size_bytes",
+    "result",
+    "finished_at",
+    "published_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "run_id": { "$ref": "#/$defs/run_id" },
+    "run_type": { "enum": ["verify", "agent-eval", "agent-regression", "agent-capability"] },
+    "report_path": {
+      "type": "string",
+      "pattern": "^runs/[0-9]{8}T[0-9]{6}Z-[a-z][a-z-]{0,31}[.][A-Za-z0-9]+/report[.]json$"
+    },
+    "report_digest": { "$ref": "#/$defs/sha256" },
+    "report_size_bytes": { "type": "integer", "minimum": 1 },
+    "result": { "enum": ["passed", "failed"] },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "published_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-z][a-z-]{0,31}[.][A-Za-z0-9]+$"
+    }
+  }
+}

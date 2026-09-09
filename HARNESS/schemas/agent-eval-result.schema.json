@@ -1,0 +1,512 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:portable-harness:schema:agent-eval-result:1",
+  "title": "Portable Harness Agent Evaluation Suite Result",
+  "description": "One regression or capability suite result with stable per-case and per-trial records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "suite",
+    "status",
+    "started_at",
+    "finished_at",
+    "provenance",
+    "cases"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "run_id": {
+      "$ref": "#/$defs/run_id"
+    },
+    "suite": {
+      "enum": [
+        "regression",
+        "capability"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/status"
+    },
+    "started_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "finished_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/case_result"
+      }
+    },
+    "failure": {
+      "$ref": "#/$defs/failure"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Project-specific data that does not change the portable contract.",
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "suite": { "const": "regression" } }, "required": ["suite"] },
+      "then": { "properties": { "run_id": { "pattern": "^[0-9]{8}T[0-9]{6}Z-agent-(eval|regression)[.][A-Za-z0-9]+$" } } }
+    },
+    {
+      "if": { "properties": { "suite": { "const": "capability" } }, "required": ["suite"] },
+      "then": { "properties": { "run_id": { "pattern": "^[0-9]{8}T[0-9]{6}Z-agent-(eval|capability)[.][A-Za-z0-9]+$" } } }
+    },
+    {
+      "if": {
+        "properties": { "status": { "enum": ["blocked", "error"] } },
+        "required": ["status"]
+      },
+      "then": { "required": ["failure"] },
+      "else": {
+        "properties": {
+          "cases": { "minItems": 1 },
+          "provenance": {
+            "properties": { "dataset_digest": { "$ref": "#/$defs/sha256" } }
+          }
+        },
+        "not": { "required": ["failure"] }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-z][a-z-]{0,31}[.][A-Za-z0-9]+$"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "failed",
+        "blocked",
+        "error"
+      ]
+    },
+    "failure": {
+      "type": "object",
+      "description": "Structured failure evidence for a blocked or erroneous suite, case, trial, or grader. Detail must be actionable and must not contain secrets.",
+      "additionalProperties": false,
+      "required": ["phase", "code", "detail"],
+      "properties": {
+        "phase": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_revision",
+        "repository_dirty",
+        "diff_digest",
+        "configuration_digest",
+        "dataset_digest"
+      ],
+      "properties": {
+        "repository_revision": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{40,128}$"
+        },
+        "repository_dirty": { "type": ["boolean", "null"] },
+        "diff_digest": {
+          "anyOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "configuration_digest": {
+          "anyOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "dataset_digest": {
+          "description": "Selected dataset identity, or null only when a blocked/error run failed before the dataset identity could be established.",
+          "anyOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "repository_dirty": { "const": true } },
+            "required": ["repository_dirty"]
+          },
+          "then": { "properties": { "diff_digest": { "$ref": "#/$defs/sha256" } } },
+          "else": { "properties": { "diff_digest": { "type": "null" } } }
+        }
+      ]
+    },
+    "case_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_digest",
+        "fixture_revision",
+        "fixture_digest",
+        "agent_config_digest",
+        "environment_identity",
+        "reference_solution_digest",
+        "graders"
+      ],
+      "properties": {
+        "case_digest": { "$ref": "#/$defs/sha256" },
+        "fixture_revision": { "type": "string", "minLength": 1 },
+        "fixture_digest": { "$ref": "#/$defs/sha256" },
+        "agent_config_digest": { "$ref": "#/$defs/sha256" },
+        "environment_identity": { "type": "string", "minLength": 1 },
+        "reference_solution_digest": { "$ref": "#/$defs/sha256" },
+        "graders": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["grader_id", "config_digest"],
+            "properties": {
+              "grader_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+              },
+              "config_digest": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest", "size_bytes"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "case_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "case_version",
+        "status",
+        "threshold_met",
+        "inputs",
+        "trials",
+        "summary",
+        "metrics"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "case_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "threshold_met": {
+          "type": ["boolean", "null"]
+        },
+        "inputs": {
+          "$ref": "#/$defs/case_inputs"
+        },
+        "trials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trial_result"
+          }
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "metrics": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/aggregate_metric" }
+        },
+        "failure": {
+          "$ref": "#/$defs/failure"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+          "then": {
+            "required": ["threshold_met"],
+            "properties": {
+              "threshold_met": { "const": true },
+              "trials": { "minItems": 1 },
+              "metrics": { "minItems": 1 },
+              "summary": { "properties": { "total": { "minimum": 1 } } }
+            },
+            "not": { "required": ["failure"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
+          "then": {
+            "required": ["threshold_met"],
+            "properties": {
+              "threshold_met": { "const": false },
+              "trials": { "minItems": 1 },
+              "metrics": { "minItems": 1 },
+              "summary": { "properties": { "total": { "minimum": 1 } } }
+            },
+            "not": { "required": ["failure"] }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "enum": ["blocked", "error"] } },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["failure"],
+            "properties": { "threshold_met": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "trial_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trial_index",
+        "status",
+        "started_at",
+        "finished_at",
+        "duration_seconds",
+        "graders"
+      ],
+      "properties": {
+        "trial_index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attempt_index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "started_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "graders": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/grader_result"
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "description": "Artifact names mapped to retained-byte identity records.",
+          "additionalProperties": { "$ref": "#/$defs/artifact" }
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "failure": {
+          "$ref": "#/$defs/failure"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "enum": ["passed", "failed"] } },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["artifacts"],
+            "properties": {
+              "artifacts": { "minProperties": 1 },
+              "graders": { "minItems": 1 }
+            },
+            "not": { "required": ["failure"] }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "enum": ["blocked", "error"] } },
+            "required": ["status"]
+          },
+          "then": { "required": ["failure"] }
+        }
+      ]
+    },
+    "grader_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grader_id",
+        "status"
+      ],
+      "properties": {
+        "grader_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "detail": {
+          "type": "string"
+        },
+        "artifact": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Key in the containing trial's artifacts object, not an independent path."
+        },
+        "failure": {
+          "$ref": "#/$defs/failure"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "enum": ["blocked", "error"] } },
+            "required": ["status"]
+          },
+          "then": { "required": ["failure"] },
+          "else": {
+            "required": ["score"],
+            "not": { "required": ["failure"] }
+          }
+        }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "passed",
+        "failed",
+        "blocked",
+        "errors",
+        "pass_rate"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blocked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pass_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "aggregate_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": {
+          "enum": ["pass_at", "pass_k", "duration_seconds", "tool_calls", "tokens", "cost"]
+        },
+        "k": { "type": "integer", "minimum": 1 },
+        "value": { "type": "number", "minimum": 0 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "name": { "enum": ["pass_at", "pass_k"] } }, "required": ["name"] },
+          "then": {
+            "required": ["k"],
+            "properties": { "value": { "maximum": 1 } }
+          },
+          "else": { "not": { "required": ["k"] } }
+        }
+      ]
+    }
+  }
+}

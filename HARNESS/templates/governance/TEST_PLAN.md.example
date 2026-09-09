@@ -1,0 +1,21 @@
+# Test Plan
+
+## {{REPLACE_ME:CHANGE_ID}} Test Design
+
+| Test ID | Acceptance ID | Requirement ID | Test implementation | Level | Fixture/data | Expected pre-implementation state | Harness stage |
+|---|---|---|---|---|---|---|---|
+| TEST-{{REPLACE_ME:CHANGE_ID}}-001 | AC-{{REPLACE_ME:CHANGE_ID}}-001 | REQ-{{REPLACE_ME:CHANGE_ID}}-001 | `path:{{REPLACE_ME:TEST_PATH}}` | `{{REPLACE_ME:TEST_LEVEL}}` | `{{REPLACE_ME:FIXTURE}}` | failing or unsupported: `{{REPLACE_ME:BASELINE_EVIDENCE}}` | `{{REPLACE_ME:STAGE_ID}}` |
+
+### Failure and Boundary Coverage
+
+- `{{REPLACE_ME:FAILURE_PERMISSION_BOUNDARY_CASES}}`
+
+Preserve useful regression tests when requirements change. Add or update tests
+linked to the amended acceptance IDs; remove a test only after the requirement
+or compatibility promise it protects is formally removed or replaced. Reuse an
+existing product stage when it directly proves the criterion, and add a stage
+only for a distinct execution boundary. Every listed stage must be scheduled by
+committed `HARNESS_VERIFY_STAGES`.
+
+Executable commands and numeric gates remain authoritative only in committed
+`HARNESS/config.env`.

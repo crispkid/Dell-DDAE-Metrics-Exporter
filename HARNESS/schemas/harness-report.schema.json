@@ -1,0 +1,470 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:portable-harness:schema:harness-report:1",
+  "title": "Portable Harness Run Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "harness_version",
+    "run_type",
+    "started_at",
+    "finished_at",
+    "repository",
+    "configuration_digest",
+    "effective_policy",
+    "sdd",
+    "environment",
+    "toolchain",
+    "redaction",
+    "storage",
+    "result",
+    "exit_code",
+    "artifacts",
+    "stages"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "run_id": { "$ref": "#/$defs/run_id" },
+    "harness_version": { "type": "string", "pattern": "^[0-9]+[.][0-9]+[.][0-9]+$" },
+    "run_type": { "enum": ["verify", "agent-eval", "agent-regression", "agent-capability"] },
+    "started_at": { "$ref": "#/$defs/timestamp" },
+    "finished_at": { "$ref": "#/$defs/timestamp" },
+    "repository": { "$ref": "#/$defs/repository" },
+    "configuration_digest": {
+      "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+    },
+    "effective_policy": { "$ref": "#/$defs/effective_policy" },
+    "sdd": { "$ref": "#/$defs/sdd" },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "bash"],
+      "properties": {
+        "os": { "type": "string" },
+        "bash": { "type": "string" }
+      }
+    },
+    "toolchain": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "version"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "version": { "type": "string" }
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "scope"],
+      "properties": {
+        "policy": { "const": "registered-env-exact-v1" },
+        "scope": { "const": "harness-metadata" }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layout_version", "canonical_path"],
+      "properties": {
+        "layout_version": { "const": "1" },
+        "canonical_path": {
+          "type": "string",
+          "pattern": "^runs/[0-9]{8}T[0-9]{6}Z-[a-z][a-z-]{0,31}[.][A-Za-z0-9]+/report[.]json$"
+        }
+      }
+    },
+    "result": { "enum": ["passed", "failed"] },
+    "exit_code": { "type": "integer", "minimum": 0 },
+    "artifacts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "stages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/stage" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "result": { "const": "passed" } }, "required": ["result"] },
+      "then": { "properties": { "exit_code": { "const": 0 } } },
+      "else": { "properties": { "exit_code": { "minimum": 1 } } }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "effective_policy": {
+              "properties": { "sdd_mode": { "const": "required" } },
+              "required": ["sdd_mode"]
+            },
+            "sdd": {
+              "properties": { "mode": { "const": "required" } },
+              "required": ["mode"]
+            }
+          },
+          "required": ["effective_policy", "sdd"]
+        },
+        {
+          "properties": {
+            "effective_policy": {
+              "properties": { "sdd_mode": { "const": "off" } },
+              "required": ["sdd_mode"]
+            },
+            "sdd": {
+              "properties": { "mode": { "const": "off" } },
+              "required": ["mode"]
+            }
+          },
+          "required": ["effective_policy", "sdd"]
+        }
+      ]
+    },
+    {
+      "if": {
+        "properties": {
+          "run_type": { "const": "verify" },
+          "result": { "const": "passed" },
+          "sdd": {
+            "properties": { "mode": { "const": "required" } },
+            "required": ["mode"]
+          }
+        },
+        "required": ["run_type", "result", "sdd"]
+      },
+      "then": {
+        "properties": {
+          "sdd": {
+            "properties": { "contract_status": { "const": "verified" } }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "run_type": { "const": "verify" } }, "required": ["run_type"] },
+      "then": { "properties": { "run_id": { "pattern": "^[0-9]{8}T[0-9]{6}Z-verify[.][A-Za-z0-9]+$" } } }
+    },
+    {
+      "if": { "properties": { "run_type": { "const": "agent-eval" } }, "required": ["run_type"] },
+      "then": { "properties": { "run_id": { "pattern": "^[0-9]{8}T[0-9]{6}Z-agent-eval[.][A-Za-z0-9]+$" } } }
+    },
+    {
+      "if": { "properties": { "run_type": { "const": "agent-regression" } }, "required": ["run_type"] },
+      "then": { "properties": { "run_id": { "pattern": "^[0-9]{8}T[0-9]{6}Z-agent-regression[.][A-Za-z0-9]+$" } } }
+    },
+    {
+      "if": { "properties": { "run_type": { "const": "agent-capability" } }, "required": ["run_type"] },
+      "then": { "properties": { "run_id": { "pattern": "^[0-9]{8}T[0-9]{6}Z-agent-capability[.][A-Za-z0-9]+$" } } }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-z][a-z-]{0,31}[.][A-Za-z0-9]+$"
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "project_stage": {
+      "enum": [
+        "lint",
+        "format",
+        "typecheck",
+        "test",
+        "coverage",
+        "build",
+        "integration",
+        "e2e",
+        "security",
+        "deploy",
+        "ci-policy",
+        "supply-chain"
+      ]
+    },
+    "network_stage": {
+      "enum": [
+        "lint",
+        "format",
+        "typecheck",
+        "test",
+        "coverage",
+        "build",
+        "integration",
+        "e2e",
+        "security",
+        "deploy",
+        "ci-policy",
+        "supply-chain",
+        "agent-regression",
+        "agent-capability"
+      ]
+    },
+    "effective_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_stages",
+        "verify_stages",
+        "network_policy",
+        "network_stages",
+        "command_timeout_seconds",
+        "coverage_threshold",
+        "sdd_mode",
+        "governance_mode",
+        "require_plan_approval",
+        "strict_repo_hygiene",
+        "instruction_targets",
+        "instruction_max_bytes",
+        "allow_root_instruction_override"
+      ],
+      "properties": {
+        "required_stages": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/project_stage" }
+        },
+        "verify_stages": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/project_stage" }
+        },
+        "network_policy": { "enum": ["deny", "declared", "allow"] },
+        "network_stages": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/network_stage" }
+        },
+        "command_timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "coverage_threshold": { "type": "number", "minimum": 0, "maximum": 100 },
+        "sdd_mode": { "enum": ["required", "off"] },
+        "governance_mode": { "enum": ["auto", "required", "off"] },
+        "require_plan_approval": { "type": "boolean" },
+        "strict_repo_hygiene": { "type": "boolean" },
+        "instruction_targets": { "type": "string", "minLength": 1 },
+        "instruction_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        },
+        "allow_root_instruction_override": { "type": "boolean" }
+      }
+    },
+    "sdd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "contract_status",
+        "change_id",
+        "specification_version",
+        "specification_digest",
+        "plan_basis_digest",
+        "test_plan_digest",
+        "traceability_digest"
+      ],
+      "properties": {
+        "mode": { "enum": ["required", "off"] },
+        "contract_status": { "enum": ["disabled", "not-run", "failed", "approved", "verified"] },
+        "change_id": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[A-Z][A-Z0-9_-]{0,63}-[0-9]{1,18}$" },
+            { "type": "null" }
+          ]
+        },
+        "specification_version": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[0-9]+[.][0-9]+[.][0-9]+$" },
+            { "type": "null" }
+          ]
+        },
+        "specification_digest": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "plan_basis_digest": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "test_plan_digest": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "traceability_digest": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "required" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "contract_status": { "enum": ["not-run", "failed", "approved", "verified"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "contract_status": { "const": "not-run" } }, "required": ["contract_status"] },
+          "then": {
+            "properties": {
+              "change_id": { "type": "null" },
+              "specification_version": { "type": "null" },
+              "specification_digest": { "type": "null" },
+              "plan_basis_digest": { "type": "null" },
+              "test_plan_digest": { "type": "null" },
+              "traceability_digest": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "contract_status": { "const": "approved" } }, "required": ["contract_status"] },
+          "then": {
+            "properties": {
+              "mode": { "const": "required" },
+              "change_id": { "type": "string" },
+              "specification_version": { "type": "string" },
+              "specification_digest": { "$ref": "#/$defs/sha256" },
+              "plan_basis_digest": { "$ref": "#/$defs/sha256" },
+              "test_plan_digest": { "$ref": "#/$defs/sha256" },
+              "traceability_digest": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "contract_status": { "const": "verified" } }, "required": ["contract_status"] },
+          "then": {
+            "properties": {
+              "mode": { "const": "required" },
+              "change_id": { "type": "string" },
+              "specification_version": { "type": "string" },
+              "specification_digest": { "$ref": "#/$defs/sha256" },
+              "plan_basis_digest": { "$ref": "#/$defs/sha256" },
+              "test_plan_digest": { "$ref": "#/$defs/sha256" },
+              "traceability_digest": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "off" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "contract_status": { "const": "disabled" },
+              "change_id": { "type": "null" },
+              "specification_version": { "type": "null" },
+              "specification_digest": { "type": "null" },
+              "plan_basis_digest": { "type": "null" },
+              "test_plan_digest": { "type": "null" },
+              "traceability_digest": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "dirty", "diff_digest"],
+      "properties": {
+        "revision": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,128}$" },
+        "dirty": { "type": ["boolean", "null"] },
+        "diff_digest": {
+          "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "dirty": { "const": true } }, "required": ["dirty"] },
+          "then": { "properties": { "diff_digest": { "$ref": "#/$defs/sha256" } } },
+          "else": { "properties": { "diff_digest": { "type": "null" } } }
+        }
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "digest", "size_bytes"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": {
+          "type": "string",
+          "pattern": "^runs/[0-9]{8}T[0-9]{6}Z-[a-z][a-z-]{0,31}[.][A-Za-z0-9]+/[A-Za-z0-9_.@+-]+(?:/[A-Za-z0-9_.@+-]+)*$",
+          "not": { "pattern": "(^|/)[.][.]?(/|$)" }
+        },
+        "digest": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "status",
+        "exit_code",
+        "duration_seconds",
+        "network_contract_allows",
+        "network_enforcement",
+        "network_allowed",
+        "command_id",
+        "command_source",
+        "detail"
+      ],
+      "properties": {
+        "stage": { "type": "string", "pattern": "^[a-z][a-z0-9:-]*$" },
+        "status": { "enum": ["passed", "failed", "skipped", "blocked"] },
+        "exit_code": { "type": "integer", "minimum": 0 },
+        "duration_seconds": { "type": "integer", "minimum": 0 },
+        "network_contract_allows": { "type": "boolean" },
+        "network_enforcement": { "const": "declaration-only" },
+        "network_allowed": { "type": "boolean" },
+        "command_id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._:/@+-]*$"
+        },
+        "command_source": { "enum": ["internal", "configured", "auto-detected", "unconfigured"] },
+        "detail": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "network_contract_allows": { "const": false },
+                "network_allowed": { "const": false }
+              },
+              "required": ["network_contract_allows", "network_allowed"]
+            },
+            {
+              "properties": {
+                "network_contract_allows": { "const": true },
+                "network_allowed": { "const": true }
+              },
+              "required": ["network_contract_allows", "network_allowed"]
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": { "status": { "enum": ["passed", "skipped"] } },
+            "required": ["status"]
+          },
+          "then": { "properties": { "exit_code": { "const": 0 } } }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "failed" } },
+            "required": ["status"]
+          },
+          "then": { "properties": { "exit_code": { "minimum": 1 } } }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "blocked" } },
+            "required": ["status"]
+          },
+          "then": { "properties": { "exit_code": { "const": 3 } } }
+        }
+      ]
+    }
+  }
+}

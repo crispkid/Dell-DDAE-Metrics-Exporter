@@ -50,6 +50,20 @@ if grep -ERn --include='*.go' --exclude='*_test.go' 'ResolveReference|path\.Join
   printf 'security failed: DDAE routes must use exact validated prefix-plus-suffix composition\n' >&2
   exit 1
 fi
+if ! grep -Eq 'type infrastructureNodeList \[\]InfrastructureNode' internal/ddae/types.go ||
+  ! grep -Fq 'fields["ephemeralStorage"]' internal/ddae/types.go ||
+  ! grep -Fq 'fields["ephemeral-storage"]' internal/ddae/types.go ||
+  ! grep -Fq 'name: "diskPressure", typeName: "DiskPressure"' internal/ddae/types.go ||
+  ! grep -Fq 'name: "memoryPressure", typeName: "MemoryPressure"' internal/ddae/types.go ||
+  [[ "$(grep -R --include='event.go' -c 'case "informational"' internal/alerts internal/serviceability | awk -F: '{ total += $2 } END { print total+0 }')" != "2" ]]; then
+  printf 'security failed: DDAE-6 node compatibility or Informational severity boundary differs from the approved contract\n' >&2
+  exit 1
+fi
+raw_payload_files="$(rg --files -uu | grep -E '(^|/)([0-9]+-)?(infra[.]nodes|s12y-events|s12y-issues)[.]json$' || true)"
+if [[ -n "$raw_payload_files" ]]; then
+  printf 'security failed: raw field payload file was copied into the repository\n' >&2
+  exit 1
+fi
 if grep -ERn --include='*.go' 'descLabels\("ddae_serviceability_log_[^"]+".*(log_id|message|resource|topic|endpoint|timestamp)' internal/metrics; then
   printf 'security failed: Serviceability Log content entered a Prometheus label contract\n' >&2
   exit 1
@@ -62,6 +76,7 @@ if [[ "$(printf '%s\n' "$serviceability_reason_labels" | sed '/^$/d' | wc -l | t
 fi
 
 go vet ./...
+go test ./internal/portable ./internal/ddae ./internal/contract -run 'PortablePrivacy|CaptureCrypto|PortableNormalExporter|PortableCrypto|PortablePath|PortableOffline'
 go test \
   ./cmd/ddae-exporter \
   ./internal/config \
@@ -73,7 +88,7 @@ go test \
   ./internal/serviceability \
   ./internal/logstate \
   ./internal/logpublisher \
-  -run 'YAML|Secret|TLS|Insecure|Warn|Allowlist|Mutation|Redact|DetailPath|Sensitive|PathPrefix|ConfiguredPath'
+  -run 'YAML|Secret|TLS|Insecure|Warn|Allowlist|Mutation|Redact|DetailPath|Sensitive|PathPrefix|ConfiguredPath|Node|Informational|ServiceabilityLists|Observed|DuplicateOnly'
 
 if grep -ERn --include='*.go' --exclude='*_test.go' 'ProxyFromEnvironment|http\.Method(Patch|Put|Delete)' internal/ddae; then
 	printf 'security failed: unsafe proxy setting or DDAE mutation method found\n' >&2

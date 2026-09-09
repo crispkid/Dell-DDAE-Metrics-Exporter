@@ -104,6 +104,7 @@ func (p *Pipeline) poll(parent context.Context) {
 			continue
 		}
 		if _, duplicate := listed[item.ID]; duplicate {
+			complete = false
 			continue
 		}
 		listed[item.ID] = struct{}{}

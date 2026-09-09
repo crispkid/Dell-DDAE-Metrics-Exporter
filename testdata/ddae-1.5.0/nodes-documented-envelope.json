@@ -1,0 +1,25 @@
+{
+  "results": [
+    {
+      "id": "node-synthetic-1",
+      "state": "Ready",
+      "capacity": {
+        "cpu": 12,
+        "memory": "20Gi",
+        "ephemeralStorage": "100Gi"
+      },
+      "allocatable": {
+        "cpu": 10,
+        "memory": "16Gi",
+        "ephemeralStorage": "80Gi"
+      },
+      "conditions": {
+        "diskPressure": "False",
+        "memoryPressure": "True",
+        "excludedCondition": "excluded-condition-canary"
+      },
+      "address": "192.0.2.10",
+      "excludedField": "excluded-node-canary"
+    }
+  ]
+}

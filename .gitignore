@@ -1,3 +1,8 @@
+# Shared development context belongs in Git: AGENTS.md, PROJECT.md, HARNESS/
+# (including config.env and ACTIVE_CHANGE), specifications, plans/, decision
+# records, templates, source, sanitized fixtures, go.mod and go.sum.
+# Ignore generated output and machine-specific data, not governance filenames.
+
 # Operating-system metadata
 .DS_Store
 .AppleDouble
@@ -10,55 +15,40 @@ Desktop.ini
 .idea/
 .vscode/
 .fleet/
-.agents/
-.codex/
 *.swp
 *.swo
 *~
 *.bak
 
-# Local coding-agent instructions, governance, and verification harness
-**/AGENT.md
-**/AGENTS.md
-**/AGENT.MD
-**/AGENTS.MD
-**/agent.md
-**/agents.md
-**/HARNESS/
-**/harness/
-**/*HARNESS*
-**/*harness*
-
-# Agent-local development, specification, and test documents
-**/PROJECT.md
-**/PROJECT.md.example
-**/PLANS.md
-**/PLANS.md.example
-**/CODE_REVIEW.md
-**/CODE_REVIEW.md.example
-**/DEVELOPMENT_PLAN.md
-**/DEVELOPMENT_PLAN.md.example
-**/EXECUTION_PLAN.md
-**/EXECUTION_PLAN.md.example
-**/SPECIFICATION.md
-**/SPECIFICATION.md.example
-**/SPEC_CHANGELOG.md
-**/SPEC_CHANGELOG.md.example
-**/TEST_PLAN.md
-**/TEST_PLAN.md.example
-**/TRACEABILITY.md
-**/TRACEABILITY.md.example
-**/ACTIVE_CHANGE
-**/ACTIVE_CHANGE.example
-**/plans/*.md
-**/plans/**/*.md
-**/docs/decisions/*.md
-**/docs/decisions/**/*.md
+# Share reviewed project configuration, agent definitions, rules and skills.
+# Account/session state is local; never copy a personal Codex home here.
+.agents/*
+!.agents/skills/
+.codex/*
+!.codex/config.toml
+!.codex/agents/
+!.codex/rules/
+!.codex/skills/
+!.codex/environments/
 
 # Build, package, test, and generated evidence
 /bin/
 /dist/
 /artifacts/
+/Portable/bin/
+/Portable/tools/
+/Portable/Portable-Windows11.zip
+/Portable/SHA256SUMS
+/Portable/build-manifest.json
+/Portable/THIRD-PARTY-NOTICES.txt
+/Portable/config.yaml
+/Portable/exporter.yaml
+/Portable/secrets/
+/Portable/trust/
+/Portable/keys/
+/Portable/results/
+/Portable/analysis/
+*.ddaecap
 /coverage/
 /test-results/
 /output/
@@ -82,6 +72,11 @@ go.work.sum
 /vendor/
 .gocache/
 .gomodcache/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+node_modules/
 
 # Logs, temporary files, and local runtime state
 *.log
@@ -95,6 +90,8 @@ go.work.sum
 /var/
 state.db
 state.db-*
+serviceability-logs.db
+serviceability-logs.db-*
 *.db-journal
 *.db.lock
 *.db-shm
@@ -107,6 +104,7 @@ state.db-*
 !.env.*.example
 config.local
 config.local.*
+*.local.toml
 /config.yaml
 /config.yml
 /config.override.yaml

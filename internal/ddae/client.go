@@ -153,9 +153,9 @@ func (c *Client) Clusters(ctx context.Context) ([]Cluster, error) {
 }
 
 func (c *Client) Nodes(ctx context.Context) ([]InfrastructureNode, error) {
-	var result []InfrastructureNode
+	var result infrastructureNodeList
 	err := c.getJSON(ctx, "nodes", c.routes.nodes, c.responseLimit, &result)
-	return result, err
+	return []InfrastructureNode(result), err
 }
 
 func (c *Client) Lock(ctx context.Context) (LockResponse, error) {

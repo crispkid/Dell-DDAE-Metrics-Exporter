@@ -1,0 +1,42 @@
+version: 1
+
+ddae:
+  base_url: https://ddae.example.invalid
+  paths:
+    ping_prefix: ""
+    api_prefix: /v1
+  credentials:
+    username_file: secrets/ddae-username
+    password_file: secrets/ddae-password
+    client_secret_file: secrets/ddae-client-secret
+  tls:
+    ca_file: ""
+    insecure_skip_verify: false
+  request_timeout: 5s
+  retry_max: 2
+
+security:
+  allow_insecure_tls: false
+
+checks:
+  ping: true
+  resources: true
+  alerts: true
+  serviceability_logs: true
+
+run:
+  duration: 5m
+  interval: 30s
+  max_requests: 1000
+  max_details_per_family_per_cycle: 10
+  shutdown_grace_period: 15s
+
+capture:
+  enabled: false
+  recipient_public_key_file: keys/recipient-public.pem
+  max_body_bytes: 8388608
+  max_total_bytes: 536870912
+
+output:
+  directory: results
+  max_report_bytes: 16777216

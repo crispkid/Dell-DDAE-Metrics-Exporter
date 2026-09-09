@@ -1,0 +1,14 @@
+# Specification Changelog
+
+| Date | Change ID | Specification version | Spec section | Reason | Compatibility/migration | Test impact |
+|---|---|---|---|---|---|---|
+| `{{REPLACE_ME:YYYY-MM-DD}}` | {{REPLACE_ME:CHANGE_ID}} | `{{REPLACE_ME:SEMVER}}` | {{REPLACE_ME:CHANGE_TITLE}} | `{{REPLACE_ME:REASON}}` | `{{REPLACE_ME:IMPACT}}` | `{{REPLACE_ME:TESTS}}` |
+
+Named requirements and plan approvals are recorded only in
+`DEVELOPMENT_PLAN.md`; do not duplicate approval evidence here.
+
+After a specification version is approved or has retained evidence, treat its
+row as append-only. Record a later clarification, replacement, deprecation, or
+behavior change in a new version row instead of rewriting historical dates,
+impact, or test scope. An unapproved draft may be corrected in place only when
+no approval or retained evidence refers to it.

@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:portable-harness:schema:agent-eval-case:1",
+  "title": "Portable Harness Agent Evaluation Case",
+  "description": "A versioned, isolated agent regression or capability case.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "version",
+    "suite",
+    "task",
+    "fixture",
+    "environment",
+    "agent",
+    "trials",
+    "success",
+    "verifier",
+    "reference",
+    "artifacts",
+    "metrics"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "id": { "$ref": "#/$defs/id" },
+    "version": { "type": "integer", "minimum": 1 },
+    "suite": { "enum": ["regression", "capability"] },
+    "tags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "task": { "type": "string", "minLength": 1 },
+    "fixture": { "$ref": "#/$defs/fixture" },
+    "environment": { "$ref": "#/$defs/environment" },
+    "agent": { "$ref": "#/$defs/agent" },
+    "trials": { "$ref": "#/$defs/trials" },
+    "constraints": { "$ref": "#/$defs/constraints" },
+    "success": { "$ref": "#/$defs/success" },
+    "verifier": { "$ref": "#/$defs/verifier" },
+    "reference": { "$ref": "#/$defs/reference" },
+    "artifacts": { "$ref": "#/$defs/artifacts" },
+    "metrics": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/metric" }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Project-specific data that does not change the portable contract.",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repository-relative path. The contract validator must reject absolute paths and traversal outside the repository."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "revision", "digest"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relative_path" },
+        "revision": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/sha256" },
+        "setup_command": { "type": "string", "minLength": 1 }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "identity", "fresh_per_trial", "network", "limits"],
+      "properties": {
+        "backend": { "enum": ["docker", "container", "process", "custom"] },
+        "identity": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Immutable image digest, environment derivation, or locked toolchain identity."
+        },
+        "fresh_per_trial": { "const": true },
+        "network": { "enum": ["none", "restricted", "allowed"] },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["timeout_seconds", "cpus", "memory_mb"],
+          "properties": {
+            "timeout_seconds": { "type": "integer", "minimum": 1 },
+            "cpus": { "type": "number", "exclusiveMinimum": 0 },
+            "memory_mb": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "model", "config_ref", "config_digest"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "config_ref": { "$ref": "#/$defs/relative_path" },
+        "config_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "trials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "infrastructure_retries"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "infrastructure_retries": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed_paths": { "$ref": "#/$defs/path_patterns" },
+        "forbidden_paths": { "$ref": "#/$defs/path_patterns" }
+      }
+    },
+    "path_patterns": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "success": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "state_assertions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "anyOf": [
+        { "required": ["commands"] },
+        { "required": ["state_assertions"] }
+      ]
+    },
+    "grader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "config_ref", "config_digest", "weight", "required"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["deterministic", "model", "human"] },
+        "command": { "type": "string", "minLength": 1 },
+        "rubric": { "type": "string", "minLength": 1 },
+        "config_ref": { "$ref": "#/$defs/relative_path" },
+        "config_digest": { "$ref": "#/$defs/sha256" },
+        "weight": { "type": "number", "minimum": 0 },
+        "required": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "deterministic" } }, "required": ["type"] },
+          "then": { "required": ["command"] }
+        },
+        {
+          "if": { "properties": { "type": { "enum": ["model", "human"] } }, "required": ["type"] },
+          "then": { "required": ["rubric"] }
+        }
+      ]
+    },
+    "verifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isolation", "command", "timeout_seconds", "threshold", "graders"],
+      "properties": {
+        "isolation": { "const": "separate" },
+        "command": { "type": "string", "minLength": 1 },
+        "timeout_seconds": { "type": "integer", "minimum": 1 },
+        "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "graders": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/grader" },
+          "contains": {
+            "type": "object",
+            "required": ["weight"],
+            "properties": {
+              "weight": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          },
+          "minContains": 1
+        }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["solution", "solution_digest", "oracle_must_pass", "noop_must_fail"],
+      "properties": {
+        "solution": { "$ref": "#/$defs/relative_path" },
+        "solution_digest": { "$ref": "#/$defs/sha256" },
+        "oracle_must_pass": { "const": true },
+        "noop_must_fail": { "const": true }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "redact"],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relative_path" }
+        },
+        "redact": { "const": true },
+        "minimum_retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional case-specific floor. Effective retention is the longer of this value and the project lifecycle policy; when omitted, the project policy is authoritative."
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "enum": ["pass_at", "pass_k", "duration_seconds", "tool_calls", "tokens", "cost"]
+        },
+        "k": { "type": "integer", "minimum": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "name": { "enum": ["pass_at", "pass_k"] } }, "required": ["name"] },
+          "then": { "required": ["k"] },
+          "else": { "not": { "required": ["k"] } }
+        }
+      ]
+    }
+  }
+}

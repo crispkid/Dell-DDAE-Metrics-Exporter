@@ -1,0 +1,31 @@
+# Development Plan
+
+## {{REPLACE_ME:CHANGE_ID}} {{REPLACE_ME:CHANGE_TITLE}}
+
+### Approval Record
+
+- Requirements Confirmed Status: pending
+- Requirements Confirmed By: pending
+- Requirements Confirmer Role: pending
+- Requirements Confirmed On: pending
+- Requirements Confirmation Evidence: pending
+- Implementation Plan Approved Status: pending
+- Implementation Plan Approved By: pending
+- Implementation Plan Approver Role: pending
+- Implementation Plan Approved On: pending
+- Implementation Plan Approval Evidence: pending
+- Approved Specification Version: pending
+- Approved Specification Digest: pending
+- Approved Plan Basis Digest: pending
+- Approved Test Plan Digest: pending
+
+`Implementation Plan Approved` covers both the marker-bounded plan basis and
+the test-plan digest above. If either changes, renew this named approval.
+Changing the active specification also invalidates Requirements Confirmed and
+its approved specification version and digest. When both sources change, renew
+both named approvals. Never replace a digest while retaining the prior actor,
+date, and evidence as though they approved the new bytes.
+
+### Execution Plan Reference
+
+- Execution Plan: plans/{{REPLACE_ME:CHANGE_ID}}.md

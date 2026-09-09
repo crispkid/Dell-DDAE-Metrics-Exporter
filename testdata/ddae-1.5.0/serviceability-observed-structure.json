@@ -1,0 +1,15 @@
+{
+  "results": [
+    {
+      "id": "log-synthetic-1",
+      "updatedon": "2026-09-02T01:02:03Z",
+      "type": "Informational",
+      "message": "excluded-list-message-canary",
+      "labels": {
+        "excluded": "excluded-list-label-canary"
+      }
+    }
+  ],
+  "threshold": 1,
+  "totalRecords": 2
+}

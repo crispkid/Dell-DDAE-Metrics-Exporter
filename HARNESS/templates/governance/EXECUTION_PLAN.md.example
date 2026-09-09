@@ -1,0 +1,61 @@
+# {{REPLACE_ME:CHANGE_ID}} {{REPLACE_ME:ACTION_ORIENTED_OUTCOME}}
+
+Use this plan only for the same unfinished observable outcome. If delivery work
+reveals a behavior, design, or acceptance-test change, record the discovery,
+pause implementation, renew the governed source, digests, and approvals, and
+then continue. Isolated exploration is not deliverable implementation or
+acceptance evidence.
+
+## Purpose and Observable Outcome
+
+{{REPLACE_ME:PURPOSE_AND_OBSERVABLE_OUTCOME}}
+
+## Context and Constraints
+
+{{REPLACE_ME:CONTEXT_AND_CONSTRAINTS}}
+
+<!-- SDD_APPROVED_PLAN_BASIS_BEGIN -->
+## Approved Plan Basis
+
+### Requirement Coverage
+
+{{REPLACE_ME:REQUIREMENT_COVERAGE}}
+
+### Technical Design
+
+{{REPLACE_ME:TECHNICAL_DESIGN}}
+
+### Task Breakdown
+
+| Task ID | Requirement IDs | Dependencies | Files/components | Verification |
+|---|---|---|---|---|
+| TASK-{{REPLACE_ME:CHANGE_ID}}-001 | REQ-{{REPLACE_ME:CHANGE_ID}}-001 | none | {{REPLACE_ME:FILES_OR_COMPONENTS}} | TEST-{{REPLACE_ME:CHANGE_ID}}-001 |
+
+### Verification Basis
+
+{{REPLACE_ME:VERIFICATION_BASIS}}
+<!-- SDD_APPROVED_PLAN_BASIS_END -->
+
+## Progress
+
+- [ ] {{REPLACE_ME:TIMESTAMPED_PROGRESS}}
+
+## Surprises and Discoveries
+
+- {{REPLACE_ME:SURPRISES_AND_DISCOVERIES}}
+
+## Decision Log
+
+- {{REPLACE_ME:DECISION_LOG}}
+
+For each material uncertainty, include the issue and evidence, viable options
+and their consequences, the recommended option and rationale, the named
+decision owner, and the actual decision when made.
+
+## Recovery and Idempotence
+
+{{REPLACE_ME:RECOVERY_AND_IDEMPOTENCE}}
+
+## Outcomes and Retrospective
+
+{{REPLACE_ME:OUTCOMES_AND_RETROSPECTIVE}}

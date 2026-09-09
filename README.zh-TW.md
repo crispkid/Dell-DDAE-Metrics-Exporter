@@ -85,6 +85,10 @@ consumer 則可使用 Alert 與 Serviceability Log events，建立後續 indexin
 
 ## 開始使用
 
+Windows 11 免安裝診斷請參考 [Portable 操作說明](Portable/README.zh-TW.md)。
+套件包含獨立設定、加密業務 API 擷取及離線 Parser 重播；Windows 原生執行
+與 authenticated DDAE 驗證仍需另外取得證據。
+
 以下流程會從 Source Code 建立 resources-only instance。此模式透過 DDAE 與
 Exporter HTTP interfaces 提供 Prometheus resource metrics。
 
@@ -548,6 +552,30 @@ proxy、service mesh 後方。
 OAuth 使用固定的 authentication POST。Monitoring 使用設定 prefix 下的九個
 read-only GET operations。
 
+### DDAE response compatibility
+
+`infrastructure-nodes` 支援 Dell 1.5.0 文件定義的 `results` object，也支援
+舊版 Exporter fixtures 使用的 bare array。兩種格式會產生相同的既有 node
+metrics。
+
+Node CPU 可使用 non-negative JSON integer 或 quantity string。Ephemeral
+storage 可使用文件中的 `ephemeralStorage`，或舊格式的
+`ephemeral-storage`。Conditions 可使用包含 `diskPressure`、
+`memoryPressure` 的 object，或舊格式的 condition array。若兩個 storage
+欄位互相衝突，或欄位值格式不正確，node collection 會失敗，不會輸出錯誤的
+零值。
+
+`serviceability-issues` 與 `serviceability-events` list 只作為索引。Exporter
+會先驗證 ID，再呼叫對應的 `/{id}` detail，成功後才建立 Kafka event。List
+record 中即使包含類似 detail 的欄位，也不會略過 detail request。來源 severity
+若為 `Informational`，輸出會使用既有的 `info`。
+
+當 `totalRecords` 大於 list 回傳的 unique valid ID 數量時，該 list 會維持
+incomplete，pipeline 也不會進入 ready。Exporter 仍可在既有限制內更新已回傳
+ID 的 detail，但不會判定其他 record 已消失。Dell 1.5.0 文件未定義 pagination
+parameter contract，因此 Exporter 不會自行加入 page、offset、cursor 或 fallback
+request。
+
 ### Prometheus metrics
 
 Metric name 使用 `ddae_` prefix。
@@ -613,6 +641,10 @@ upsert，即可安全處理重複的 at-least-once delivery。
 ## 開發
 
 所有專案指令都從 Repository root 執行。
+
+更換電腦或重新 clone 時，請先閱讀[跨電腦接續開發](docs/development-portability.md)。
+Git 保存 Agent 指令、Harness、規格、核准紀錄與執行計畫；執行時憑證及本機產生的
+測試證據由各環境另行準備。
 
 | Task | Command | Result |
 |---|---|---|

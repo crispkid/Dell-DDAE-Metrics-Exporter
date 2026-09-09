@@ -1,0 +1,136 @@
+<!-- PORTABLE_PROJECT_TEMPLATE: remove after replacing every {{REPLACE_ME:*}} token -->
+# Project Context
+
+Copy this file to `PROJECT.md`. Replace every `{{REPLACE_ME:*}}` token and
+delete optional sections that do not apply. Executable commands and stage lists
+belong only in committed `HARNESS/config.env`; this file explains why they are
+required, what they cover, and who owns them.
+
+## Required Core
+
+- Project name: `{{REPLACE_ME:PROJECT_NAME}}`
+- Purpose and observable outcome: `{{REPLACE_ME:PURPOSE}}`
+- Lifecycle: `{{REPLACE_ME:LIFECYCLE}}`
+- Accountable owner or role: `{{REPLACE_ME:OWNER}}`
+- Shared baseline version: `1.0.0`
+- Shared baseline source and maintainer: `{{REPLACE_ME:BASELINE_SOURCE}}`
+
+## Sources of Truth
+
+- Product behavior: `{{REPLACE_ME:PRODUCT_SOURCE}}`
+- Architecture and durable decisions: `{{REPLACE_ME:ARCHITECTURE_SOURCE}}`
+- API and data contracts: `{{REPLACE_ME:CONTRACT_SOURCE}}`
+- Operations or explicit non-applicability: `{{REPLACE_ME:OPERATIONS_SOURCE}}`
+- Conflict precedence: `{{REPLACE_ME:SOURCE_PRECEDENCE}}`
+
+## Component Map
+
+| Component | Path | Responsibility | Owner | Runtime/version source |
+|---|---|---|---|---|
+| `{{REPLACE_ME:COMPONENT}}` | `{{REPLACE_ME:PATH}}` | `{{REPLACE_ME:RESPONSIBILITY}}` | `{{REPLACE_ME:OWNER}}` | `{{REPLACE_ME:RUNTIME}}` |
+
+Also identify generated, vendored, migration, fixture, and deployment paths when
+they exist.
+
+## Specification-Driven Development
+
+- SDD mode: `required`
+- SDD exemption reason: Not applicable while SDD mode is required.
+- SDD exemption owner: Not applicable while SDD mode is required.
+- SDD exemption follow-up: Not applicable while SDD mode is required.
+- Normative specification location: `SPECIFICATION.md`
+- Changes requiring a specification: `{{REPLACE_ME:SDD_SCOPE}}`
+- Repository policy for changes that may use committed SDD mode `off`:
+  `{{REPLACE_ME:SDD_OFF_SCOPE_OWNER_AND_FOLLOW_UP}}`
+- Specification owner: `{{REPLACE_ME:SPEC_OWNER}}`
+- Requirements approver: `{{REPLACE_ME:REQUIREMENTS_APPROVER}}`
+- Design and test-plan approver: `{{REPLACE_ME:PLAN_APPROVER}}`
+- Change ID lifecycle and same-change/new-change decision authority:
+  `{{REPLACE_ME:CHANGE_ID_LIFECYCLE}}`
+- Specification versioning policy:
+  `{{REPLACE_ME:SPEC_VERSION_POLICY}}`
+- Requirement and acceptance-ID replacement/deprecation policy:
+  `{{REPLACE_ME:REQUIREMENT_ID_POLICY}}`
+- Investigation and prototype isolation/disposition policy:
+  `{{REPLACE_ME:EXPLORATION_POLICY}}`
+- Required SDD artifacts: `SPECIFICATION.md`, `SPEC_CHANGELOG.md`,
+  `DEVELOPMENT_PLAN.md`, `TEST_PLAN.md`, `TRACEABILITY.md`, and
+  `plans/<change-id>.md`
+- Emergency SDD-off authority, required committed reason, and
+  retrospective-spec deadline: `{{REPLACE_ME:SDD_EMERGENCY_POLICY}}`
+- SDD conflict precedence: approved specification > approved plan basis and
+  approved test plan > tasks > implementation and observed test results >
+  descriptive documentation. User and applicable instruction authority still
+  take precedence over repository files.
+- Material uncertainty protocol: document the issue and evidence, viable
+  options and consequences, the recommended option and rationale, and the named
+  decision owner before changing the specification or approved plan basis.
+
+## Development and Verification Intent
+
+`HARNESS/config.env` is the executable source of truth. Record only the intent
+and boundaries here; do not copy command strings or numeric settings.
+
+- Definition of Done, why each configured stage is required, and which product
+  stages may close SDD acceptance evidence: `{{REPLACE_ME:STAGE_INTENT}}`
+- Integration/E2E prerequisites and isolated data: `{{REPLACE_ME:TEST_BOUNDARIES}}`
+- Security, CI, supply-chain, and deployment gate rationale: `{{REPLACE_ME:GATE_RATIONALE}}`
+- Supported developer/CI environments and version files: `{{REPLACE_ME:ENVIRONMENTS}}`
+- Harness setting override policy: `committed policy values are authoritative; {{REPLACE_ME:ALLOWED_RUNTIME_OVERRIDES}}`
+- Deterministic handoff command: `./HARNESS/harness.sh verify`
+
+## Security and Data
+
+- Data classification: `{{REPLACE_ME:DATA_CLASSIFICATION}}`
+- Authentication/authorization authority: `{{REPLACE_ME:AUTHORITY}}`
+- Secret-management and redaction rules: `{{REPLACE_ME:SECRET_POLICY}}`
+- Dependency and vulnerability policy: `{{REPLACE_ME:DEPENDENCY_POLICY}}`
+- Backup, deletion, recovery, and incident owner: `{{REPLACE_ME:RECOVERY_POLICY}}`
+
+## Compatibility and Change Management
+
+- Public interfaces and compatibility promise: `{{REPLACE_ME:COMPATIBILITY}}`
+- Migration and deprecation process: `{{REPLACE_ME:MIGRATION}}`
+- Governance activation and approval enforcement: `{{REPLACE_ME:GOVERNANCE_POLICY}}`
+- Approval roles and independent-review threshold: `{{REPLACE_ME:APPROVAL_ROLES}}`
+
+## Instruction Contract
+
+- Instruction targets checked by Harness: `{{REPLACE_ME:INSTRUCTION_TARGETS}}`
+- Instruction compatibility: `{{REPLACE_ME:OPEN_BASELINE_OR_CODEX_EXTENSIONS}}`
+- Project-only agent rules: `{{REPLACE_ME:PROJECT_RULES}}`
+
+## Known Constraints
+
+- `{{REPLACE_ME:CONSTRAINT_IMPACT_OWNER_RESOLUTION}}`
+
+## Optional: Agent Evaluation
+
+Delete this section when agent evaluation is disabled, or set `Enabled: no` and
+remove the remaining fields.
+
+- Enabled: `{{REPLACE_ME:YES_OR_NO}}`
+- Dataset and validator ownership: `{{REPLACE_ME:EVAL_OWNERSHIP}}`
+- Regression/capability suite gate and exit policy: `{{REPLACE_ME:EVAL_GATE_POLICY}}`
+- Reliability metrics and grader calibration: `{{REPLACE_ME:EVAL_METRICS}}`
+- Input, dataset, and artifact integrity policy: `{{REPLACE_ME:EVAL_INTEGRITY}}`
+- Required artifact keys and blocked/error exceptions: `{{REPLACE_ME:EVAL_ARTIFACTS}}`
+- Independent evaluator requirement: `{{REPLACE_ME:EVAL_INDEPENDENCE}}`
+
+## Optional: Evidence Lifecycle and Operations
+
+Delete this section when the project delegates these decisions to a referenced
+organizational policy.
+
+- Policy reference or owner: `{{REPLACE_ME:EVIDENCE_POLICY_OWNER}}`
+- Evidence classification, access, redaction, and immutable storage: `{{REPLACE_ME:EVIDENCE_HANDLING}}`
+- Retention by evidence class and enforcement mechanism: `{{REPLACE_ME:EVIDENCE_RETENTION}}`
+- Deployment targets, readiness, observability, and recovery: `{{REPLACE_ME:OPERATIONS}}`
+
+## Optional: CI and Supply Chain
+
+Delete this section when covered by a referenced organization-wide policy.
+
+- CI workflow and permissions policy: `{{REPLACE_ME:CI_POLICY}}`
+- Third-party pinning and workload identity policy: `{{REPLACE_ME:CI_IDENTITY}}`
+- SBOM, provenance, checksum, and signing policy: `{{REPLACE_ME:SUPPLY_CHAIN}}`

@@ -1,0 +1,117 @@
+{
+  "schema_version": "1",
+  "run_id": "20260813T010000Z-verify.Abc123",
+  "harness_version": "1.0.0",
+  "run_type": "verify",
+  "started_at": "2026-08-13T01:00:00Z",
+  "finished_at": "2026-08-13T01:00:05Z",
+  "repository": {
+    "revision": null,
+    "dirty": null,
+    "diff_digest": null
+  },
+  "configuration_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "effective_policy": {
+    "required_stages": ["test"],
+    "verify_stages": ["test"],
+    "network_policy": "declared",
+    "network_stages": ["integration", "e2e", "security", "deploy"],
+    "command_timeout_seconds": 0,
+    "coverage_threshold": 80,
+    "sdd_mode": "required",
+    "governance_mode": "required",
+    "require_plan_approval": true,
+    "strict_repo_hygiene": false,
+    "instruction_targets": ".",
+    "instruction_max_bytes": 32768,
+    "allow_root_instruction_override": false
+  },
+  "sdd": {
+    "mode": "required",
+    "contract_status": "verified",
+    "change_id": "CHG-101",
+    "specification_version": "1.0.0",
+    "specification_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "plan_basis_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "test_plan_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "traceability_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "environment": {
+    "os": "Darwin arm64",
+    "bash": "3.2.57(1)-release"
+  },
+  "toolchain": [],
+  "redaction": {
+    "policy": "registered-env-exact-v1",
+    "scope": "harness-metadata"
+  },
+  "storage": {
+    "layout_version": "1",
+    "canonical_path": "runs/20260813T010000Z-verify.Abc123/report.json"
+  },
+  "result": "passed",
+  "exit_code": 0,
+  "artifacts": [],
+  "stages": [
+    {
+      "stage": "doctor",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_seconds": 1,
+      "network_contract_allows": false,
+      "network_enforcement": "declaration-only",
+      "network_allowed": false,
+      "command_id": "internal:doctor",
+      "command_source": "internal",
+      "detail": "configuration and environment validated"
+    },
+    {
+      "stage": "repo-doctor",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_seconds": 1,
+      "network_contract_allows": false,
+      "network_enforcement": "declaration-only",
+      "network_allowed": false,
+      "command_id": "internal:repo-doctor",
+      "command_source": "internal",
+      "detail": "repository hygiene validated"
+    },
+    {
+      "stage": "governance-doctor",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_seconds": 1,
+      "network_contract_allows": false,
+      "network_enforcement": "declaration-only",
+      "network_allowed": false,
+      "command_id": "internal:governance-doctor",
+      "command_source": "internal",
+      "detail": "governance and approval basis validated"
+    },
+    {
+      "stage": "test",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_seconds": 1,
+      "network_contract_allows": false,
+      "network_enforcement": "declaration-only",
+      "network_allowed": false,
+      "command_id": "project.v1:test",
+      "command_source": "configured",
+      "detail": "configured command"
+    },
+    {
+      "stage": "sdd-check",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_seconds": 1,
+      "network_contract_allows": false,
+      "network_enforcement": "declaration-only",
+      "network_allowed": false,
+      "command_id": "internal:sdd-check",
+      "command_source": "internal",
+      "detail": "current-run stage evidence and strict SDD contract verified"
+    }
+  ]
+}

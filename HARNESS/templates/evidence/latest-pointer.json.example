@@ -1,0 +1,11 @@
+{
+  "schema_version": "1",
+  "run_id": "20260813T010000Z-verify.Abc123",
+  "run_type": "verify",
+  "report_path": "runs/20260813T010000Z-verify.Abc123/report.json",
+  "report_digest": "sha256:ada5f4a1c91f0e40225ebdf5d2a501cdf093a0b30a0815b51a150bc4d56abe64",
+  "report_size_bytes": 3709,
+  "result": "passed",
+  "finished_at": "2026-08-13T01:00:05Z",
+  "published_at": "2026-08-13T01:00:05Z"
+}

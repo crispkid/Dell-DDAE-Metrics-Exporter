@@ -86,6 +86,11 @@ Serviceability Log events for downstream indexing and alerting workflows.
 
 ## Getting Started
 
+For the self-contained Windows 11 diagnostic package, start with the
+[Portable operator guide](Portable/README.zh-TW.md). It includes separate
+configuration, encrypted business API capture and offline parser replay.
+Native Windows and authenticated DDAE validation remain separate evidence gates.
+
 The following procedure builds a resources-only instance from source. This mode
 provides Prometheus resource metrics through the DDAE and exporter HTTP
 interfaces.
@@ -553,6 +558,32 @@ authenticated reverse proxy or service mesh.
 OAuth is the fixed authentication POST. Monitoring uses the nine read-only GET
 operations under the configured prefixes.
 
+### DDAE response compatibility
+
+`infrastructure-nodes` accepts the Dell 1.5.0 response object with a `results`
+array. It also accepts the legacy bare-array response used by earlier exporter
+fixtures. Both forms produce the same existing node metrics.
+
+For node resources, CPU may be a non-negative JSON integer or a quantity
+string. Ephemeral storage may use the documented `ephemeralStorage` name or the
+legacy `ephemeral-storage` name. Conditions may use the documented
+`diskPressure`/`memoryPressure` object or the legacy condition array. Conflicting
+aliases and malformed values fail the node collection instead of producing a
+false zero.
+
+`serviceability-issues` and `serviceability-events` lists are indexes. The
+exporter validates each returned ID and fetches the corresponding `/{id}`
+detail before creating a Kafka event. Extra detail-like fields in a list record
+do not bypass the detail request. Source severity `Informational` is emitted as
+the existing `info` severity.
+
+When `totalRecords` is larger than the number of unique valid returned IDs, the
+list remains incomplete and its pipeline is not ready. Returned IDs may still
+receive bounded detail refresh, but the exporter does not infer disappeared
+records. The Dell 1.5.0 document does not define a pagination parameter
+contract, so the exporter does not add page, offset, cursor, or fallback
+requests.
+
 ### Prometheus metrics
 
 Metric names use the `ddae_` prefix.
@@ -618,6 +649,11 @@ record key to handle a repeated at-least-once delivery safely.
 ## Development
 
 Run project commands from the Repository root.
+
+For a new computer or a fresh checkout, follow the
+[cross-machine development guide](docs/development-portability.md). Git carries
+the agent instructions, Harness, specifications, approval records and execution
+plans; runtime credentials and generated evidence are provisioned separately.
 
 | Task | Command | Result |
 |---|---|---|

@@ -305,9 +305,12 @@ func normalizeSeverity(value *string) string {
 	if value == nil {
 		return "unknown"
 	}
-	switch strings.ToLower(strings.TrimSpace(*value)) {
+	normalized := strings.ToLower(strings.TrimSpace(*value))
+	switch normalized {
 	case "critical", "error", "warning", "info", "normal":
-		return strings.ToLower(strings.TrimSpace(*value))
+		return normalized
+	case "informational":
+		return "info"
 	default:
 		return "unknown"
 	}

@@ -1,2 +1,7 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Keep shell scripts and digest-bound governance bytes identical on checkout.
+# Binary files remain binary through automatic text detection.
+* text=auto eol=lf
+
+# Native Windows command launchers use CRLF in the working tree.
+*.cmd text eol=crlf
+*.bat text eol=crlf

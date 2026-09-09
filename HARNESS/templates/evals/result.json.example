@@ -1,0 +1,132 @@
+{
+  "schema_version": "1",
+  "run_id": "20260813T010000Z-agent-eval.Abc123",
+  "suite": "regression",
+  "status": "passed",
+  "started_at": "2026-08-13T01:00:00Z",
+  "finished_at": "2026-08-13T01:00:15Z",
+  "provenance": {
+    "repository_revision": "0123456789abcdef0123456789abcdef01234567",
+    "repository_dirty": true,
+    "diff_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "configuration_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "dataset_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "cases": [
+    {
+      "case_id": "agent-scope-001",
+      "case_version": 1,
+      "status": "passed",
+      "threshold_met": true,
+      "inputs": {
+        "case_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "fixture_revision": "fixture-v1",
+        "fixture_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "agent_config_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "environment_identity": "example/eval@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "reference_solution_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "graders": [
+          {
+            "grader_id": "outcome-and-scope",
+            "config_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        ]
+      },
+      "trials": [
+        {
+          "trial_index": 1,
+          "status": "passed",
+          "started_at": "2026-08-13T01:00:00Z",
+          "finished_at": "2026-08-13T01:00:05Z",
+          "duration_seconds": 5,
+          "graders": [
+            {
+              "grader_id": "outcome-and-scope",
+              "status": "passed",
+              "score": 1,
+              "detail": "The requested behavior and path constraints passed."
+            }
+          ],
+          "artifacts": {
+            "diff.patch": {"path":"artifacts/agent-scope-001/trial-1/diff.patch","digest":"sha256:3000000000000000000000000000000000000000000000000000000000000001","size_bytes":512},
+            "outcome.json": {"path":"artifacts/agent-scope-001/trial-1/outcome.json","digest":"sha256:3000000000000000000000000000000000000000000000000000000000000002","size_bytes":128},
+            "trajectory.json": {"path":"artifacts/agent-scope-001/trial-1/trajectory.json","digest":"sha256:3000000000000000000000000000000000000000000000000000000000000003","size_bytes":4096},
+            "verifier/stdout.txt": {"path":"artifacts/agent-scope-001/trial-1/verifier/stdout.txt","digest":"sha256:3000000000000000000000000000000000000000000000000000000000000004","size_bytes":64},
+            "verifier/stderr.txt": {"path":"artifacts/agent-scope-001/trial-1/verifier/stderr.txt","digest":"sha256:3000000000000000000000000000000000000000000000000000000000000005","size_bytes":0}
+          },
+          "metrics": {
+            "tool_calls": 6,
+            "tokens": 2450
+          }
+        },
+        {
+          "trial_index": 2,
+          "status": "passed",
+          "started_at": "2026-08-13T01:00:05Z",
+          "finished_at": "2026-08-13T01:00:10Z",
+          "duration_seconds": 5,
+          "graders": [
+            {
+              "grader_id": "outcome-and-scope",
+              "status": "passed",
+              "score": 1
+            }
+          ],
+          "artifacts": {
+            "diff.patch": {"path":"artifacts/agent-scope-001/trial-2/diff.patch","digest":"sha256:4000000000000000000000000000000000000000000000000000000000000001","size_bytes":512},
+            "outcome.json": {"path":"artifacts/agent-scope-001/trial-2/outcome.json","digest":"sha256:4000000000000000000000000000000000000000000000000000000000000002","size_bytes":128},
+            "trajectory.json": {"path":"artifacts/agent-scope-001/trial-2/trajectory.json","digest":"sha256:4000000000000000000000000000000000000000000000000000000000000003","size_bytes":4096},
+            "verifier/stdout.txt": {"path":"artifacts/agent-scope-001/trial-2/verifier/stdout.txt","digest":"sha256:4000000000000000000000000000000000000000000000000000000000000004","size_bytes":64},
+            "verifier/stderr.txt": {"path":"artifacts/agent-scope-001/trial-2/verifier/stderr.txt","digest":"sha256:4000000000000000000000000000000000000000000000000000000000000005","size_bytes":0}
+          },
+          "metrics": {
+            "tool_calls": 6,
+            "tokens": 2450
+          }
+        },
+        {
+          "trial_index": 3,
+          "status": "passed",
+          "started_at": "2026-08-13T01:00:10Z",
+          "finished_at": "2026-08-13T01:00:15Z",
+          "duration_seconds": 5,
+          "graders": [
+            {
+              "grader_id": "outcome-and-scope",
+              "status": "passed",
+              "score": 1
+            }
+          ],
+          "artifacts": {
+            "diff.patch": {"path":"artifacts/agent-scope-001/trial-3/diff.patch","digest":"sha256:5000000000000000000000000000000000000000000000000000000000000001","size_bytes":512},
+            "outcome.json": {"path":"artifacts/agent-scope-001/trial-3/outcome.json","digest":"sha256:5000000000000000000000000000000000000000000000000000000000000002","size_bytes":128},
+            "trajectory.json": {"path":"artifacts/agent-scope-001/trial-3/trajectory.json","digest":"sha256:5000000000000000000000000000000000000000000000000000000000000003","size_bytes":4096},
+            "verifier/stdout.txt": {"path":"artifacts/agent-scope-001/trial-3/verifier/stdout.txt","digest":"sha256:5000000000000000000000000000000000000000000000000000000000000004","size_bytes":64},
+            "verifier/stderr.txt": {"path":"artifacts/agent-scope-001/trial-3/verifier/stderr.txt","digest":"sha256:5000000000000000000000000000000000000000000000000000000000000005","size_bytes":0}
+          },
+          "metrics": {
+            "tool_calls": 6,
+            "tokens": 2450
+          }
+        }
+      ],
+      "summary": {
+        "total": 3,
+        "passed": 3,
+        "failed": 0,
+        "blocked": 0,
+        "errors": 0,
+        "pass_rate": 1,
+        "duration_seconds": 15
+      },
+      "metrics": [
+        { "name": "pass_at", "k": 1, "value": 1 },
+        { "name": "pass_at", "k": 3, "value": 1 },
+        { "name": "pass_k", "k": 3, "value": 1 },
+        { "name": "duration_seconds", "value": 15 },
+        { "name": "tool_calls", "value": 18 },
+        { "name": "tokens", "value": 7350 }
+      ]
+    }
+  ]
+}

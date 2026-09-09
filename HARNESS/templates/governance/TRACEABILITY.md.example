@@ -1,0 +1,20 @@
+# Traceability
+
+## {{REPLACE_ME:CHANGE_ID}} Requirement Trace
+
+| Requirement ID | Specification version | Acceptance IDs | Design decision | Task IDs | Implementation | Test IDs | Harness stage | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| REQ-{{REPLACE_ME:CHANGE_ID}}-001 | {{REPLACE_ME:SEMVER}} | AC-{{REPLACE_ME:CHANGE_ID}}-001 | `{{REPLACE_ME:DESIGN_DECISION}}` | TASK-{{REPLACE_ME:CHANGE_ID}}-001 | `path:{{REPLACE_ME:IMPLEMENTATION_PATH}}` | TEST-{{REPLACE_ME:CHANGE_ID}}-001 | `{{REPLACE_ME:STAGE_ID}}` | `stage:{{REPLACE_ME:STAGE_ID}}` | Planned |
+
+Allowed active statuses are `Planned`, `Implemented`, and `Verified`. A handoff
+requires `Verified`; strict SDD has no row-level waiver. Implementation uses
+`path:<repository-relative-path>`. Harness stage and evidence may be
+comma-separated lists such as `test,integration` and
+`stage:test,stage:integration`. The stage set must exactly match the mapped Test
+Plan rows, and every stage must pass in the same `verify` run.
+
+Return an impacted row to `Planned` before implementation whenever its
+requirement, acceptance criteria, design, task, implementation reference, test,
+stage, or evidence mapping changes. Never carry `Verified` across an amended
+mapping. Restore `Verified` only after current approvals, completed references,
+and a same-run `verify` close the updated row.

@@ -1,0 +1,56 @@
+# Code Review Contract
+
+Copy this file to `CODE_REVIEW.md` and adapt only project-specific criteria.
+Review the requested change and its final diff; do not expand the implementation
+scope merely to satisfy reviewer preferences.
+
+## Review Priorities
+
+Review in this order:
+
+1. Correctness and user-visible regressions.
+2. Security, privacy, authorization, and unsafe data handling.
+3. Public contracts, compatibility, migrations, and operational recovery.
+4. Missing or misleading tests and verification evidence.
+5. SDD consistency: requirement, acceptance, task, test, implementation, stage,
+   evidence, and trace status agree with the approved identities.
+6. Maintainability issues likely to cause a defect.
+
+Style-only preferences are findings only when they violate an explicit project
+contract or materially reduce clarity.
+
+## Evidence
+
+- Inspect the task, applicable instructions, changed code, adjacent contracts,
+  and relevant tests.
+- Verify outcomes rather than relying on an agent's claim or transcript.
+- Treat mocked unit tests as unit evidence only. Require real boundaries for
+  integration and end-to-end claims.
+- Do not report a command as passing unless its successful result is available.
+- Under required SDD, compare the active specification, approved plan-basis,
+  test-plan, and traceability digests with the report. Reject a `Verified` trace
+  row whose referenced implementation, test, current-run stage, or retained
+  evidence is absent or misleading.
+- For a requirement amendment, verify the Change ID decision, specification
+  version and append-only changelog entry, preserved or formally retired
+  regression coverage, impacted trace rows, and every approval renewed by the
+  changed governed bytes.
+
+## Findings
+
+Each finding should include:
+
+- severity: `critical`, `high`, `medium`, or `low`;
+- a concise statement of the defect and its impact;
+- a precise file and line reference;
+- the input, state, or sequence that triggers it;
+- an actionable correction when one is not obvious.
+
+Prioritize a small number of defensible findings. If no material issue is found,
+say so and identify any verification limitation or residual risk.
+
+## Independence
+
+For high-risk changes, the project may require an independent reviewer or
+evaluator that did not implement the change. Record the required role and gate
+in `PROJECT.md`; never infer or fabricate approval.
