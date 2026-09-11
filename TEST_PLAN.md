@@ -518,3 +518,59 @@ Full matrix in plans/DDAE-9.md and immutable candidate. Include source-bounded r
 ### Failure and Boundary Coverage
 
 Use the immutable approved DDAE-10 candidate and plan matrix: caps, timestamp ties, overlap, replay, crashes, unknown schema, scope/TLS, concurrency, stale/readiness, privacy and recovery. Real integration evidence remains separate.
+## DDAE-11 Test Plan
+
+| Test | Acceptance | Requirement | Implementation | Kind | Cases | Prior state | Stage |
+|---|---|---|---|---|---|---|---|
+| TEST-DDAE-11-001 | AC-DDAE-11-001 | REQ-DDAE-11-001 | `path:internal/config/kafka_sasl_test.go` | component | TestQueryEventsKafkaSASLCredentials and TestQueryEventsKafkaSASLYAMLPrecedence; exact secrets for all three mechanisms and direct/file/YAML/env inputs | source confirms query-only credentials omitted; executable red evidence recorded in plan before fix | `test` |
+| TEST-DDAE-11-002 | AC-DDAE-11-002 | REQ-DDAE-11-002 | `path:internal/config/kafka_sasl_test.go` | component | TestQueryEventsKafkaSASLRejectsInvalidCredentials; missing/empty/NUL/UTF-8, read failures, file size limits, conflicts and redacted errors | query-only skips required credential validation; existing global conflict checks retained | `test` |
+| TEST-DDAE-11-003 | AC-DDAE-11-003 | REQ-DDAE-11-003 | `path:internal/config/kafka_sasl_test.go` | regression | TestKafkaSASLPipelineSelection; all publisher combinations, metrics-only/resources-only no-read, disabled query and no-SASL behavior | query-only event combination omits credentials; other profiles have existing behavior | `test` |
+
+### Failure and Boundary Coverage
+
+AC-DDAE-11-001：使用三種 SASL mechanism，測試 query-only events 的 direct
+password、password file、YAML 設定，以及 env 對 YAML username/mechanism/
+password file 的覆寫。逐一驗證實際 Config secret 值，不能只檢查無錯誤。
+
+AC-DDAE-11-002：測試缺少 username/password、空值、不合法值、密碼檔讀取
+失敗、大小界限與 direct/file 衝突；驗證錯誤名稱及合成 canary 不外洩。
+密碼沿用 loadSecret 的既有定義，不另加 trimming 或新的字元限制。
+
+AC-DDAE-11-003：涵蓋三種 Kafka 輸出的所有開關組合；均關閉時另以
+query metrics-only 與 resources-only 驗證不讀取 Kafka 密碼檔。
+另測 query 關閉但 events 原始設定為 true 的既有隔離行為，以及 events
+啟用但 SASL 為空時不要求帳密。既有格式、衝突與 TLS 檢查繼續生效。
+
+Use synthetic credentials, isolated lookup/readers and existing config helpers.
+Test errors must not print credential values or full Config values. YAML cases
+exercise decodeYAML and layeredLookup. Record the new tests failing on RC4
+before the one-line fix, then passing with the same assertions.
+Execute existing config/Kafka/app/TLS/documentation regressions and full Harness
+verify, security and sdd:check without weakening policy; retain actual results in
+plans/DDAE-11.md. Independent review remains separate. Real broker authentication,
+DDAE integration and E2E require their authorized environment and distinct evidence.
+## DDAE-12 Test Plan
+
+| Test | Acceptance | Requirement | Implementation | Kind | Cases | Prior state | Stage |
+|---|---|---|---|---|---|---|---|
+| TEST-DDAE-12-001 | AC-DDAE-12-001 | REQ-DDAE-12-001 | `path:internal/outbox/audit_test.go` | regression | outbox：三筆皆 pending 的 A/B/A、更多重複狀態、跨 ID、每次 ack 前後 reopen、重複 ack；順序、hash、數量與剩餘 bytes 正確 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+| TEST-DDAE-12-002 | AC-DDAE-12-002 | REQ-DDAE-12-002 | `path:internal/alerts/audit_test.go` | regression | alerts 與 serviceability：quota 1／較大 quota、持續失敗與正常 ID、new/refresh 競爭、持續新 ID、ID 移除／重入、取消；正常者在有限輪內被選到，狀態不假成功、配額／記憶體有界 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+| TEST-DDAE-12-003 | AC-DDAE-12-003 | REQ-DDAE-12-003 | `path:internal/snapshot/audit_test.go` | regression | snapshot／metrics／server 契約：各 family 錯開完成、stale 邊界與邊界外、缺 family、partial failure、resources 關閉；readiness、ddae_up 與單項 freshness 一致 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+| TEST-DDAE-12-004 | AC-DDAE-12-004 | REQ-DDAE-12-004 | `path:internal/contract/node_payload_compatibility_test.go` | regression | ddae／collector 契約：pressure object/array 的 null、缺值與合法值對照；null 不判成功、optional omission 相容、其餘合法 metrics 保留 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+| TEST-DDAE-12-005 | AC-DDAE-12-005 | REQ-DDAE-12-005 | `path:internal/querystate/audit_test.go` | regression | querystate／queries：新 DB、合法 v1 reopen、零 bytes／截斷／缺 bucket、來源／版本錯誤、未過期 terminal checkpoint 遺失、錯誤 count/bytes/sequence/aggregate；拒絕並保留原資料；payload 故障注入：未知 SQL canary、duplicate key、source mismatch、required/optional 欄位、type/state/time/duration/size 界限；不產出可送 Kafka 的污染 record，不洩漏內容；合法多筆歷史、metrics-only 更新、已 prune checkpoint 的舊 pending、非終態 optional completion、累計資料與 Final 冪等性均保留 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+| TEST-DDAE-12-006 | AC-DDAE-12-006 | REQ-DDAE-12-006 | `path:internal/queryclient/audit_test.go` | regression | queryclient／queries／historyscan：注入請求前後相差超過 5 秒的時間、合法等待中完成事件、真正超前 5 秒、timeout；兩條 caller 均驗證回應時間，Observed 保持請求開始，較舊觀察不能覆蓋較新資料 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+| TEST-DDAE-12-007 | AC-DDAE-12-007 | REQ-DDAE-12-007 | `path:internal/outbox/audit_test.go` | regression | outbox／alerts：checkpoint 未滿、恰滿、已滿，pending 不可裁剪、合法 pruning 後恢復容量；Stats/Health/reconcile 及 readiness 正確 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+| TEST-DDAE-12-008 | AC-DDAE-12-008 | REQ-DDAE-12-008 | `path:internal/config/topic_test.go` | regression | config：三條 pipeline、YAML/env precedence、1/249/250 長度、ASCII 合法字元、空值、`.`、`..`、slash、非 ASCII、空白/control；關閉與 topic 隔離規則不變 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+| TEST-DDAE-12-009 | AC-DDAE-12-009 | REQ-DDAE-12-009 | `path:internal/contract/audit_cleanup_test.go` | regression | 編譯／既有測試／unused 分析：C1–C6 無效部分消失，token refresh、server routes、TLS opt-in、DDAE-11 SASL 135 regression subcases、build metadata 與 helper 契約保留 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+| TEST-DDAE-12-010 | AC-DDAE-12-010 | REQ-DDAE-12-010 | `path:internal/contract/audit_documentation_test.go` | regression | 更新雙語 README、runbook 中 topic 規則、health/capacity、query corruption 排查與資料保護指引；執行完整 gate、diff review 與證據對照 | Audit source/isolated repro confirms gap; formal red evidence to be retained before fix (cleanup/docs inspected structurally) | `test` |
+
+### Failure and Boundary Coverage
+
+The full immutable candidate matrix and canonical plan basis remain authoritative.
+The mapped executable paths are primary anchors: B2 additionally exercises serviceability,
+B3 metrics/server/contract, B4 ddae/normalization, B6 live queries and backfill, and B7 health.
+Use synthetic data, fixed/injected clocks, isolated HTTPS and t.TempDir; retain red and green
+results, including state byte preservation, retention exceptions and canary non-disclosure.
+Run existing DDAE-11 SASL and configuration/contract regressions. Final verification includes
+all committed Harness stages and scoped unused/dependency analysis as specified in the plan;
+unit tests do not close blocked external/security/review/supply-chain gates.

@@ -141,9 +141,6 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	if !managementEnabled && !cfg.Query.Enabled {
 		return cfg, errors.New("at least one monitoring pipeline must be enabled")
 	}
-	if cfg.AllowInsecureTLS, err = boolean(lookup, "ALLOW_INSECURE_TLS", false); err != nil {
-		return cfg, err
-	}
 	if cfg.DDAETLSInsecureSkipVerify, err = boolean(lookup, "DDAE_TLS_INSECURE_SKIP_VERIFY", false); err != nil {
 		return cfg, err
 	}
@@ -302,14 +299,14 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	}
 	if topic, ok := lookup("KAFKA_TOPIC"); ok {
 		cfg.KafkaTopic = topic
-		if strings.TrimSpace(topic) == "" || strings.ContainsAny(topic, "\x00\r\n\t ") || len(topic) > 249 {
+		if !validKafkaTopic(topic) {
 			return cfg, errors.New("KAFKA_TOPIC is invalid")
 		}
 	} else if cfg.AlertMonitoringEnabled {
 		return cfg, errors.New("KAFKA_TOPIC is required when alert monitoring is enabled")
 	}
 	cfg.KafkaServiceabilityLogTopic = optionalText(lookup, "KAFKA_SERVICEABILITY_LOG_TOPIC", "ddae-serviceability-logs")
-	if strings.TrimSpace(cfg.KafkaServiceabilityLogTopic) == "" || strings.ContainsAny(cfg.KafkaServiceabilityLogTopic, "\x00\r\n\t ") || len(cfg.KafkaServiceabilityLogTopic) > 249 {
+	if !validKafkaTopic(cfg.KafkaServiceabilityLogTopic) {
 		return cfg, errors.New("KAFKA_SERVICEABILITY_LOG_TOPIC is invalid")
 	}
 	if cfg.AlertMonitoringEnabled && cfg.ServiceabilityLogMonitoringEnabled && cfg.KafkaTopic == cfg.KafkaServiceabilityLogTopic {
@@ -340,7 +337,7 @@ func load(lookup lookupFunc, readFile func(string) ([]byte, error)) (Config, err
 	default:
 		return cfg, errors.New("KAFKA_SASL_MECHANISM is unsupported")
 	}
-	if cfg.KafkaSASLMechanism != "" && (cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled) {
+	if cfg.KafkaSASLMechanism != "" && (cfg.AlertMonitoringEnabled || cfg.ServiceabilityLogMonitoringEnabled || cfg.Query.Events) {
 		var username string
 		username, err = requiredText(lookup, "KAFKA_SASL_USERNAME")
 		if err != nil {

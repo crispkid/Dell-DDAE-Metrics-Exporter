@@ -33,3 +33,8 @@ The quoted DDAE-8 2.3.0 entry preserves the historical row verbatim. Harness 1.0
 | 2026-09-09 | DDAE-9 | 2.5.0 | Query queue, duration and details | Explicit user approval | Default off, isolated state and topic | Synthetic boundary tests and authorized live diagnostics; external gates remain |
 
 | 2026-09-09 | DDAE-10 | 2.6.0 | Bounded log/query history backfill | Explicit user-approved candidate | Opt-in, durable progress, bounded-window readiness | Candidate acceptance matrix; external gates remain |
+
+| 2026-09-11 | DDAE-11 | 2.7.0 | Query-only Kafka SASL credential loading | User approved the exact linked candidate by Ok | Existing settings and state preserved; missing/invalid query-only credentials fail at startup | Direct/file/YAML/env, three mechanisms, redacted failures and pipeline isolation regression matrix; inherited gates remain |
+
+
+| 2026-09-11 | DDAE-12 | 2.8.0 | Eight audit bug fixes and six unused-code cleanups, including query-state payload integrity | User approved exact linked candidate by 同意 | Preserve valid state/schema/build interfaces and DDAE-11; amend DDAE-3/4 pending-clear and fairness descriptions without rewriting history | Candidate regression matrix; full gates and independent review remain required; S2 excluded |

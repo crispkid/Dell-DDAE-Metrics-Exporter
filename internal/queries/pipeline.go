@@ -183,14 +183,9 @@ func (p *Pipeline) Poll(parent context.Context) {
 			go func() {
 				defer wg.Done()
 				for id := range jobs {
-					observed := time.Now().UTC()
-					body, err := p.client.Get(ctx, "/ui/api/insights/history/queries/"+id)
+					event, err := queryclient.FetchDetail(ctx, p.client, id, p.source)
 					if err == nil {
-						var event queryclient.Event
-						event, err = queryclient.DecodeDetail(body, id, p.source, observed)
-						if err == nil {
-							err = p.store.Record(event)
-						}
+						err = p.store.Record(event)
 					}
 					results <- err
 				}

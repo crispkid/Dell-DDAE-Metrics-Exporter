@@ -23,7 +23,8 @@ func TestBackfillCrashAfterRecord(t *testing.T) {
 		t.Fatal(e)
 	}
 	now := time.Now().UTC()
-	event := queryclient.Event{SourceInstance: "test", QueryID: "q1", User: "synthetic", State: "finished", Submitted: now.Add(-time.Minute), Completed: &now, Observed: now}
+	elapsed := 60.0
+	event := queryclient.Event{SourceInstance: "test", QueryID: "q1", User: "synthetic", State: "finished", Submitted: now.Add(-time.Minute), Completed: &now, Observed: now, Elapsed: &elapsed}
 	committed := false
 	src := callbackSource{list: func(_ context.Context, w historystate.Window) (Page, error) {
 		return Page{Complete: true, Items: []historystate.Item{{ID: "q1", When: now}}}, nil

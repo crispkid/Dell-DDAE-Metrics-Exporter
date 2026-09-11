@@ -4,6 +4,26 @@
 這些內容刻意獨立於專案 Landing Page；README 描述目前可由 Repository 核對的操作介面，
 本文件不代表 release 核准。
 
+## 後續修正：DDAE-11（2026-09-11）
+
+使用者核准獨立的 DDAE-11 後，已將 query events 納入既有 SASL 帳密
+載入條件，並更新雙語 README 與 runbook 的適用條件。下方「本次變更」
+與原始驗證表保留 README 重寫當時的歷史紀錄。
+
+新增回歸測試涵蓋三種 SASL mechanism、direct/file/YAML/env precedence、
+缺少／不合法帳密與檔案、錯誤訊息不外洩，以及各事件輸出組合的隔離行為。
+相同測試在修正前有 87 個子案例失敗，修正後全部 135 個子案例與 4 個
+頂層測試通過。這是設定載入測試，不是實際 broker 認證證據。
+變更與完整 gate 結果以 [DDAE-11 執行紀錄](../plans/DDAE-11.md) 為準。
+已發布的 RC4 不包含此修正；此次尚未 commit 或發布新版。
+
+使用者另行要求本機 Docker Kafka 真實測試後，已完成 19 個案例，
+三種 SASL 的三種密碼來源與 mTLS 共成功讀回 10 筆事件；也以舊 RC4
+重現無法傳送的問題。Kafka broker、producer 與 consumer 為真實元件，
+DDAE 來源為合成 HTTPS fixture。完整矩陣、環境排查及驗證邊界見
+[Kafka 認證實測](kafka-auth-validation-2026-09-11.md)。
+正式 DDAE integration / E2E、獨立審查及既有 release gates 仍待完成。
+
 ## 本次變更
 
 - 重寫 `README.md` 與 `README.zh-TW.md`，採一致的章節、設定、指令與範例。
@@ -51,6 +71,10 @@ security 另行執行的結果如上。
 ## 需確認的程式與驗證事項
 
 ### 1. Query-only Kafka SASL credential 載入條件
+
+**後續狀態：** 已在本機 DDAE-11 修正；以下保留修正前的查核依據。
+修正後的設定測試及隔離 Docker SASL broker 實測通過；
+正式 DDAE 全鏈路驗證與獨立安全審查仍待完成。
 
 **證據：** [config.go](../internal/config/config.go) 已在 broker 必填條件納入
 `cfg.Query.Events`，但 SASL username/password 的載入條件仍只包含

@@ -3643,3 +3643,309 @@ External release gates remain incomplete; source retention, timestamp saturation
 ### Open Questions
 
 - None.
+## DDAE-11 Query-only Kafka SASL credential loading
+
+### Specification Metadata
+
+- Specification Version: 2.7.0
+- Status: active
+- Owner: Current repository user in this Codex conversation
+- Clarification Status: resolved
+
+### Problem Statement
+
+With alerts and Serviceability Logs disabled, query events omit configured
+Kafka SASL credentials. Resource monitoring does not affect this condition.
+The common producer consumes the resulting empty credential fields.
+
+### Goals
+
+Load and validate existing Kafka SASL credentials for query events through
+the common configuration loader, including query-only operation.
+
+### Non-goals
+
+No new authentication methods, configuration keys, dependencies, TLS changes,
+Kafka schema/topic/state changes, deployment, commit or release.
+Inherited verification gates and historical approvals remain unchanged.
+
+### Actors and Scenarios
+
+An operator enables query events and uses PLAIN, SCRAM-SHA-256 or SCRAM-SHA-512.
+Valid credentials reach Config; missing/invalid credentials fail at startup.
+
+### Requirement Index
+
+| Requirement | Priority | Requirement text | Acceptance |
+|---|---|---|---|
+| REQ-DDAE-11-001 | must | 任一 Kafka 輸出（alerts、serviceability logs、query events）啟用且選用 SASL 時，MUST 透過既有 loader 載入 username 與 password。適用 PLAIN、SCRAM-SHA-256、SCRAM-SHA-512；MUST 保留 YAML/env precedence 與 direct/file secret 規則。 | AC-DDAE-11-001 |
+| REQ-DDAE-11-002 | must | Query-only events + SASL MUST 在設定載入時拒絕缺少或不合法的必要帳密、不可讀取／空值／過大／內容不合法的密碼檔與 direct/file 衝突；錯誤不得包含帳密、檔案內容或底層錯誤中的敏感值。 | AC-DDAE-11-002 |
+| REQ-DDAE-11-003 | must | MUST 保留 query metrics-only 與 resources-only 的 Kafka secret 隔離，保留 alerts/logs/mixed profiles 的既有認證行為。未選用 SASL 時不新增 SASL 帳密要求；既有 TLS/mTLS 規則、broker/topic 驗證與 query pipeline 關閉行為不變。 | AC-DDAE-11-003 |
+
+### Acceptance Criteria
+
+| Acceptance | Requirement | Criterion |
+|---|---|---|
+| AC-DDAE-11-001 | REQ-DDAE-11-001 | Three mechanisms, direct/file password, YAML and env overrides yield the exact configured credential values. |
+| AC-DDAE-11-002 | REQ-DDAE-11-002 | Missing/invalid/conflicting credentials and invalid secret files fail loading without exposing canaries. |
+| AC-DDAE-11-003 | REQ-DDAE-11-003 | All publisher combinations preserve credential loading/isolation; disabled query and no-SASL behavior remain unchanged. |
+
+AC-DDAE-11-001：使用三種 SASL mechanism，測試 query-only events 的 direct
+password、password file、YAML 設定，以及 env 對 YAML username/mechanism/
+password file 的覆寫。逐一驗證實際 Config secret 值，不能只檢查無錯誤。
+
+AC-DDAE-11-002：測試缺少 username/password、空值、不合法值、密碼檔讀取
+失敗、大小界限與 direct/file 衝突；驗證錯誤名稱及合成 canary 不外洩。
+密碼沿用 loadSecret 的既有定義，不另加 trimming 或新的字元限制。
+
+AC-DDAE-11-003：涵蓋三種 Kafka 輸出的所有開關組合；均關閉時另以
+query metrics-only 與 resources-only 驗證不讀取 Kafka 密碼檔。
+另測 query 關閉但 events 原始設定為 true 的既有隔離行為，以及 events
+啟用但 SASL 為空時不要求帳密。既有格式、衝突與 TLS 檢查繼續生效。
+
+### Interfaces, Data, and Failure Behavior
+
+Existing KAFKA_SASL_MECHANISM, KAFKA_SASL_USERNAME, KAFKA_SASL_PASSWORD /
+KAFKA_SASL_PASSWORD_FILE and corresponding YAML settings retain their meaning.
+The only implementation change is including cfg.Query.Events in the existing
+SASL credential loading predicate. Existing requiredText, loadSecret and
+layeredLookup define validation, newline handling, precedence and conflicts.
+
+### Quality Attributes
+
+Reuse the existing secret boundary, preserve redacted errors and TLS/mTLS
+behavior, and avoid reading unused Kafka credential files.
+Unit tests do not certify broker authentication or real integration.
+
+### Compatibility and Migration
+
+Existing valid query-only SASL configuration works after rebuilding/replacing
+the executable and restarting. Missing/invalid credentials fail earlier at
+configuration loading. No state migration or new setting is required.
+Rollback preserves state but restores this defect. Do not delete outboxes or
+disable TLS/SASL as a workaround. Independent review and full gates remain required.
+
+### Assumptions
+
+- The user approved the exact linked candidate by replying "Ok" on 2026-09-11.
+- Candidate SHA256: 7f213471d37ef90860b890f7ea76cb0dcd313554aab427122ffe2330cde884f8.
+- Canonical headings/tables transcribe that candidate; they do not add behavior.
+- DDAE-11 is a new change following the published RC4 baseline.
+
+### Open Questions
+
+- None.
+## DDAE-12 Audit bug fixes and unused-code cleanup
+
+### Specification Metadata
+
+- Specification Version: 2.8.0
+- Status: active
+- Owner: Current repository user in this Codex conversation
+- Clarification Status: resolved
+
+### Problem Statement
+
+- B1：`internal/outbox/store.go` 以 hash 判斷是否清除 pending
+- B2：`internal/alerts/pipeline.go`、`internal/serviceability/pipeline.go` 依最後成功時間排序
+- B3：`internal/snapshot/store.go` 只用整輪完成時間判斷健康
+- B4：`internal/ddae/types.go` 省略物件格式的 represented null pressure
+- B5 / S1：`internal/querystate/store.go` 缺少既有檔案與持久化內容完整性檢查
+- B6：`internal/queries/pipeline.go`、`internal/historyscan/adapters.go`、`internal/queryclient/types.go` 共用請求前時間做未來時間檢查
+- B7：`internal/outbox/store.go` 未將 checkpoint 滿額納入 full
+- B8：`internal/config/config.go`、`internal/config/query.go` Kafka topic 名稱驗證不完整
+
+### Goals
+
+Fix the eight confirmed audit bugs, protect retained data and remove the six identified unused-code groups with regression coverage.
+
+### Non-goals
+
+此次範圍包括 B5 同根因的 S1：拒絕被污染的 query outbox payload。
+S2「security-policy.sh 的兩個 TLS target 規則過時」是另一項安全流程變更，
+本提案不修改該規則，也不關閉或弱化安全 gate。完整驗證仍須如實列出此阻擋。
+其他不確定問題，例如重複 legacy node condition 的衝突值處理，另行釐清，
+不混入已確認 Bug 的修復。
+
+不新增 API、設定名稱、metric、label、Kafka schema、topic、認證機制或相依套件。
+保留既有 read-only DDAE 存取、API/版本邊界、secret/TLS 規則、HTTP routes、
+逾時／併行／回應大小上限、Kafka at-least-once delivery、shutdown 與部署契約。
+不清空 state、不自動修復損毀 DB、不做 migration；不包含 commit、push、tag、
+release、部署或重新建立 Docker 測試環境。
+
+
+### Actors and Scenarios
+
+Operators collecting resources and publishing alert/log/query events encounter repeated states,
+failed detail requests, staggered or slow responses, full checkpoints and invalid topic names.
+Valid existing state must reopen; provably corrupt or polluted state fails closed without reset.
+
+### Requirement Index
+
+| Requirement | Priority | Requirement text | Acceptance |
+|---|---|---|---|
+| REQ-DDAE-12-001 | must | 同一 alert 的 A → B → A 三筆同時待送時，MUST 可逐筆 acknowledge 並於任一階段重啟；只有確認最新 pending sequence 才清除其 pending 標記，保留其他事件與順序。 | AC-DDAE-12-001 |
+| REQ-DDAE-12-002 | must | 持續失敗的 detail MUST 不阻止同類別其他持續合格 ID 輪到執行；兩條 pipeline 均保留既有類別配額、總量與併行限制，不把失敗寫成成功 checkpoint。 | AC-DDAE-12-002 |
+| REQ-DDAE-12-003 | must | resources 所需任一 family 缺少、過期或其必要採集失敗時，MUST 正確反映整體 readiness 與 `ddae_up`；保留單項原始採集時間與其他 pipeline 的隔離規則。 | AC-DDAE-12-003 |
+| REQ-DDAE-12-004 | must | 已出現但為 null 的 pressure 值 MUST 與 legacy array 的無效值一致，令該 collector 不完整；真正省略的 optional 欄位保持原契約，其他可用欄位仍可呈現。 | AC-DDAE-12-004 |
+| REQ-DDAE-12-005 | must | 既有零長度、格式損毀、schema/source 不符或可核對的不一致 MUST 明確失敗並保留資料，不初始化成新 DB；污染事件 MUST 在 replay 前被拒絕，合法 retention、重啟與累計值保持相容。 | AC-DDAE-12-005 |
+| REQ-DDAE-12-006 | must | 即時採集與 backfill MUST 以回應取得時的時間驗證未來時間上限；請求開始的 observation ordering MUST 保留，慢但未逾時的合法回應可接收，舊觀察不能覆蓋新狀態。 | AC-DDAE-12-006 |
+| REQ-DDAE-12-007 | must | checkpoint 數量恰好等於上限時 MUST 回報容量已滿，並反映既有 pipeline health/readiness；只按既有規則清理可過期、非 pending 的 checkpoint。 | AC-DDAE-12-007 |
+| REQ-DDAE-12-008 | must | alerts、logs、queries 的 topic MUST 共用合法名稱檢查：1–249 個 ASCII 英數字、`.`、`_`、`-`，且排除 `.` 與 `..`；保留各模式既有必填／關閉／topic 隔離語意與設定優先順序。 | AC-DDAE-12-008 |
+| REQ-DDAE-12-009 | must | MUST 移除已確認無效的部分，保留真正使用中的 refresh 時間、handler closure、測試／契約 helper 與 build/provenance 介面，不藉清理新增 runtime 行為。 | AC-DDAE-12-009 |
+| REQ-DDAE-12-010 | must | MUST 補足前述回歸測試、保留有效歷史測試及 DDAE-11 修正，更新受影響的雙語操作文件，分別記錄實際通過、失敗、blocked 與未執行的驗證，不將合成測試稱為真實外部整合。 | AC-DDAE-12-010 |
+
+### Acceptance Criteria
+
+| Acceptance | Requirement | Criterion |
+|---|---|---|
+| AC-DDAE-12-001 | REQ-DDAE-12-001 | 同一 alert 的 A → B → A 三筆同時待送時，MUST 可逐筆 acknowledge 並於任一階段重啟；只有確認最新 pending sequence 才清除其 pending 標記，保留其他事件與順序。 |
+| AC-DDAE-12-002 | REQ-DDAE-12-002 | 持續失敗的 detail MUST 不阻止同類別其他持續合格 ID 輪到執行；兩條 pipeline 均保留既有類別配額、總量與併行限制，不把失敗寫成成功 checkpoint。 |
+| AC-DDAE-12-003 | REQ-DDAE-12-003 | resources 所需任一 family 缺少、過期或其必要採集失敗時，MUST 正確反映整體 readiness 與 `ddae_up`；保留單項原始採集時間與其他 pipeline 的隔離規則。 |
+| AC-DDAE-12-004 | REQ-DDAE-12-004 | 已出現但為 null 的 pressure 值 MUST 與 legacy array 的無效值一致，令該 collector 不完整；真正省略的 optional 欄位保持原契約，其他可用欄位仍可呈現。 |
+| AC-DDAE-12-005 | REQ-DDAE-12-005 | 既有零長度、格式損毀、schema/source 不符或可核對的不一致 MUST 明確失敗並保留資料，不初始化成新 DB；污染事件 MUST 在 replay 前被拒絕，合法 retention、重啟與累計值保持相容。 |
+| AC-DDAE-12-006 | REQ-DDAE-12-006 | 即時採集與 backfill MUST 以回應取得時的時間驗證未來時間上限；請求開始的 observation ordering MUST 保留，慢但未逾時的合法回應可接收，舊觀察不能覆蓋新狀態。 |
+| AC-DDAE-12-007 | REQ-DDAE-12-007 | checkpoint 數量恰好等於上限時 MUST 回報容量已滿，並反映既有 pipeline health/readiness；只按既有規則清理可過期、非 pending 的 checkpoint。 |
+| AC-DDAE-12-008 | REQ-DDAE-12-008 | alerts、logs、queries 的 topic MUST 共用合法名稱檢查：1–249 個 ASCII 英數字、`.`、`_`、`-`，且排除 `.` 與 `..`；保留各模式既有必填／關閉／topic 隔離語意與設定優先順序。 |
+| AC-DDAE-12-009 | REQ-DDAE-12-009 | MUST 移除已確認無效的部分，保留真正使用中的 refresh 時間、handler closure、測試／契約 helper 與 build/provenance 介面，不藉清理新增 runtime 行為。 |
+| AC-DDAE-12-010 | REQ-DDAE-12-010 | MUST 補足前述回歸測試、保留有效歷史測試及 DDAE-11 修正，更新受影響的雙語操作文件，分別記錄實際通過、失敗、blocked 與未執行的驗證，不將合成測試稱為真實外部整合。 |
+
+The approved failure/boundary matrix is transcribed into TEST_PLAN.md and plans/DDAE-12.md.
+
+### Interfaces, Data, and Failure Behavior
+
+**B1：acknowledge 依 sequence 清除 pending。**
+
+沿用 `internal/logstate/store.go` 已有模式，在同一個 bbolt transaction
+掃描時保留最新 pending hash 與 sequence。hash 一致性檢查仍存在；
+以被確認的 sequence 是否為最新 pending 決定清除，而非只比較內容 hash。
+保留已不存在 record 的 acknowledge 冪等性、per-alert 狀態及 transaction 原子性。
+不更動資料格式；已損毀的 DB 繼續明確報錯，不自行刪掉阻塞事件。
+新規格只修訂 DDAE-3 對 pending 清除條件的 hash-only 描述，歷史 basis 不改字。
+
+**B2：為 detail 採集加入有界輪轉次序。**
+
+兩條 pipeline 各自維護記憶體中的 eligible-ID 排程次序。首次建立次序時
+採既有最後成功時間與 ID 決定順序；仍在等待的 ID 保持次序，新加入的 ID
+排在已等待者之後。每次被選入本輪配額，即消耗一個排程輪次並移到隊尾，
+不論該次請求最後成功、失敗或取消；採集與成功 checkpoint 則照實際結果處理。
+每輪移除已不合格／已不在清單的排程記錄，記憶體量受目前 bounded list 限制。
+重啟後從有效 checkpoint 重新建立排序，不新增持久化格式。
+
+保留 new/changed 與 refresh 兩類配額：quota=1 時兩類交替，較大 quota
+維持 refresh 至少 1、通常為 floor(limit/4)，並保留不足時的配額借用。
+同類別內不再讓最後「成功」時間永久決定失敗者優先權；持續合格者前方
+只有有限等待項目，新加入者不能不斷插隊。此為 DDAE-3／DDAE-4 排序說明的
+明確修訂，保留其不得無限期飢餓與所有資源上限要求。
+
+**B3、B4、B7：健康狀態與資料狀態一致。**
+
+- B3：集中使用一致的 freshness 判斷，確認 Ping、Clusters、Nodes、Lock、
+  Power 必要 snapshot 的 Present 與各自 CollectedAt；同時保留整輪與
+  collector success 條件。沿用既有 stale 邊界，不把早取得資料的時間改晚。
+- B4：區分 object pressure key 不存在與值為 null；後者保留為可辨識的
+  無效 condition，走既有 normalization／partial failure 路徑。與 legacy
+  array 做對照，不丟棄其餘合法 node 欄位，也不擴充新的 pressure metric。
+- B7：checkpoint 計數納入 alert `Stats.Full`／Health 的 `>=` 邊界，
+  reconciliation 採既有安全 pruning 後再次判斷 full；參照 logstate 行為，
+  保留 pending checkpoint，不以淘汰事件換取健康狀態。
+
+**B5 / S1：在可證明的資料邊界拒絕損毀與污染。**
+
+1. 開啟前區分新檔與既有檔。只有確定不存在的新檔可初始化 schema 1；
+   既有零長度／非 regular／symlink／無法確認狀態的路徑明確失敗。
+   既有檔缺失 meta、checkpoints、events 或版本／source 不合時，不建立替代 bucket。
+2. 啟動時先驗證既有 logical state，再執行既有 retention pruning 或啟動
+   publisher。檢查 bucket、sequence key／bucket sequence、checkpoint key/value、
+   aggregate 結構，以及 outbox 的 pending count／payload byte sum 是否一致。
+   檢查不新增每次 Prometheus scrape 全表掃描；持久化讀寫入口共用必要驗證。
+3. 對持久化事件使用明確欄位 allowlist 與型別：拒絕未知／重複欄位、trailing
+   JSON、無效 UTF-8、缺少必要值、source mismatch、無效 ID／state／timestamp
+   結構、超過 64 KiB payload 及超出既有界限的 duration。沿用目前 Event 的
+   欄位與正規化 state，保留 optional 欄位語意。輸入 Record 亦須符合這些
+   可持久化條件，Records 在回傳可送往 Kafka 的 bytes 前再驗證該 record。
+   不靠刪除未知欄位後繼續送出來掩蓋污染，錯誤不包含 payload 或 SQL canary。
+4. 只使用資料模型確實保證的跨筆不變量。尚未早於「已儲存 retention Floor」
+   的 pending 終態事件，必須有對應且一致的 final checkpoint；驗證發生在
+   推進 Floor 之前，不能用本次 prune 掩蓋遺失。已早於 Floor 的 pending
+   事件可能合法失去 checkpoint，仍保留並 replay，不因缺 checkpoint 判錯。
+   非終態可以有多筆歷史變更，events 關閉期間也可更新 checkpoint；不把所有
+   pending hash 強制等同目前 checkpoint。對非終態使用能確立的結構／來源檢查，
+   不臆測不存在的交易歷史。
+5. 累計 Completed／histograms 不能由已裁剪的 checkpoint 或待送事件重算。
+   只驗證合法 state/key、histogram 維度、有限且非負的 sum、bucket/count
+   一致性等可證明條件，保留真實累計值。不假裝能偵測所有一致性造假的離線
+   修改，亦不以新增 metadata、schema migration 或重置計數器擴張本提案。
+6. 合法 schema 1 DB 保持相容；負向測試在 reopen 失敗前後比較原始內容，
+   確認沒有清空、刪除、重建或先 prune。保留 0700/0600 權限、單一 writer
+   與有界讀取／既有容量限制。若實作發現必須改 schema 或修復既有資料才能
+   達成要求，停止並提出修訂，不自行增加 migration。
+
+持久化事件的 observed_at 仍是請求開始的排序時間；合法 completed_at 可以
+晚於 observed_at。既有 DB 驗證不使用錯誤的「completed <= observed」條件，
+也不以 reopen 當下的時鐘重新判定歷史事件的 freshness。
+
+**B6：分開 observation ordering 與 response validation 時間。**
+
+保留請求前的 observation time，用來建立 Event.Observed 及防止較舊請求覆蓋
+新 checkpoint。取得 HTTP response 後再讀時間，用於 submission/completion
+是否超前現在 5 秒的檢查。透過小型內部 helper 明確傳入兩個時間，保留現有
+DecodeDetail 呼叫的相容入口；即時 query 與 backfill 均使用修正路徑。
+不放寬 5 秒上限，不改變 HTTP deadline，也不把較舊請求因較晚完成而當作新觀察。
+
+**B8：共用 Kafka topic validator。**
+
+以一個小型 helper 檢查 Kafka 已有名稱語法，三種輸出共用；沿用各 caller
+現有何時驗證、是否必填、topic 是否需互異的規則。合法 topic 無須修改。
+非法名稱由啟動後重試失敗改為載入設定時明確失敗；錯誤只指出設定問題，
+不帶 credential。規則依 Apache Kafka 4.3.1 的
+[Topic validator](https://raw.githubusercontent.com/apache/kafka/4.3.1/clients/src/main/java/org/apache/kafka/common/internals/Topic.java)。
+
+**C1–C6：清理範圍與保留項目。**
+
+| ID | 修改 | 明確保留 |
+|---|---|---|
+| C1 | 移除 `internal/alerts/event.go` 的 `var _ = fmt.Sprintf` 及唯一對應 import | 既有 event 編碼、欄位與 redaction |
+| C2 | 移除 `tokenRefreshResult.refreshAt` 欄位及其寫入 | 真正控制更新時機的 `tokenManager.refreshAt` |
+| C3 | 移除 `Server.state`／`staleAfter` 欄位與重複初始化 | handler closure 使用的 state／staleAfter 參數與其他被讀取欄位 |
+| C4 | 移除 `app.BuildInfo.Revision`／`BuildDate` 及 main → app 的無效傳遞 | `main.revision`／`main.buildDate` linker symbols、VERSION／REVISION／BUILD_DATE build inputs、ldflags、Docker／reproducible build／provenance 產物契約 |
+| C5 | 移除 historyscan 測試的未用 `testSource.fail` | 既有測試與本次真正會觸發失敗的回歸測試 |
+| C6 | 刪除 `ALLOW_INSECURE_TLS` 第二次相同載入／驗證區塊 | 第一次載入及所有三種 TLS target 的雙重 opt-in 檢查 |
+
+C4 的 linker symbols 是刻意保留的打包介面，不新增假引用或 runtime
+輸出來消除工具警告。若 unused 檢查列出它們，應逐項註明原因，而不是
+關閉整體檢查。保留 `RequiredCollectors`、`config.Load`、`routeSet.operations`、
+`ApprovedOperations`、`ApprovedOperationsForPrefixes` 等有測試／契約用途
+的 helpers；不單憑 production entry 的 call graph 就刪除。
+
+
+### Quality Attributes
+
+Preserve bounded work, privacy, read-only DDAE access, honest freshness/capacity health,
+Kafka at-least-once semantics, existing metrics/schema/labels and fail-closed state validation.
+Synthetic tests are local evidence, not real DDAE integration or independent review.
+
+### Compatibility and Migration
+
+合法設定與 schema 1 state 原地相容，不新增 migration。非法 topic 在啟動即
+被拒絕；過期資料與 checkpoint 滿額會更早且正確反映健康狀態；已損毀的
+query state 會停止啟動並保留資料，操作者需檢查損毀／還原來源，不能刪 DB
+當成正常安裝步驟。其他 metric identity、Kafka payload/key/header 與
+at-least-once 語意維持不變，不保證消除 Kafka 已送出但 ack 前中斷的合法重送。
+
+本次只操作測試建立的隔離資料，不接觸使用者 runtime state。未來 rollout
+前停止 exporter，保留完整 state 備份後替換 binary；rollback 使用原 binary
+與保留的有效 state，會重新帶回舊缺陷。已損毀 state 不因 rollback 自動恢復。
+任何資料修復、清空、遷移、部署與發布需另取得具體授權。
+
+
+### Assumptions
+
+- User approval: "同意", 2026-09-11, to the exact linked DDAE-12 candidate.
+- Candidate SHA256: 5d76c6a3034e1d57deed691d7c84206cb5b041efab316b619baeb21b84e63b2e.
+- DDAE-12 explicitly amends hash-only pending clearing and success-only within-class scheduling descriptions in DDAE-3/4; historical approval bytes remain unchanged.
+- No automatic database repair, schema migration, S2 rule change or release is authorized.
+
+### Open Questions
+
+- None.

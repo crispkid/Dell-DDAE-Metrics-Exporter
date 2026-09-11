@@ -15,7 +15,8 @@ import (
 )
 
 var (
-	version   = "dev"
+	version = "dev"
+	// Kept as linker inputs for the existing build/provenance interface.
 	revision  = "unknown"
 	buildDate = "unknown"
 )
@@ -54,7 +55,7 @@ func runWithArgs(arguments []string) error {
 	}
 	logger := observability.NewLogger(os.Stdout, cfg.LogLevel, cfg.LogFormat)
 	warnInsecureTLS(logger, cfg)
-	application, err := app.New(cfg, logger, app.BuildInfo{Version: version, Revision: revision, BuildDate: buildDate})
+	application, err := app.New(cfg, logger, app.BuildInfo{Version: version})
 	if err != nil {
 		observability.LogFailure(logger, "startup failed", "startup", err)
 		return err

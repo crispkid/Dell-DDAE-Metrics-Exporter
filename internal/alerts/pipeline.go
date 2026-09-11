@@ -35,6 +35,7 @@ type Pipeline struct {
 	maxPerCycle     int
 	concurrency     int
 	nextRefreshTurn bool
+	waitingOrder    map[string]int
 	logger          Logger
 }
 
@@ -171,7 +172,7 @@ func (p *Pipeline) poll(parent context.Context) {
 	}
 }
 
-func (p *Pipeline) selectFair(tasks []detailTask) []detailTask {
+func (p *Pipeline) selectFair(tasks []detailTask) (selected []detailTask) {
 	newTasks := make([]detailTask, 0, len(tasks))
 	refreshTasks := make([]detailTask, 0, len(tasks))
 	for _, task := range tasks {
@@ -183,6 +184,14 @@ func (p *Pipeline) selectFair(tasks []detailTask) []detailTask {
 	}
 	order := func(values []detailTask) {
 		sort.Slice(values, func(i, j int) bool {
+			left, leftWaiting := p.waitingOrder[values[i].id]
+			right, rightWaiting := p.waitingOrder[values[j].id]
+			if leftWaiting != rightWaiting {
+				return leftWaiting
+			}
+			if leftWaiting {
+				return left < right
+			}
 			if !values[i].lastFetched.Equal(values[j].lastFetched) {
 				return values[i].lastFetched.Before(values[j].lastFetched)
 			}
@@ -191,6 +200,25 @@ func (p *Pipeline) selectFair(tasks []detailTask) []detailTask {
 	}
 	order(newTasks)
 	order(refreshTasks)
+	defer func() {
+		// Attempts consume a turn even when they fail. Keep only this bounded
+		// eligible set; newcomers join behind IDs already waiting.
+		order(tasks)
+		attempted := make(map[string]bool, len(selected))
+		for _, task := range selected {
+			attempted[task.id] = true
+		}
+		next := make(map[string]int, len(tasks))
+		for _, task := range tasks {
+			if !attempted[task.id] {
+				next[task.id] = len(next)
+			}
+		}
+		for _, task := range selected {
+			next[task.id] = len(next)
+		}
+		p.waitingOrder = next
+	}()
 	limit := min(p.maxPerCycle, len(tasks))
 	if limit <= 0 {
 		return nil
@@ -220,7 +248,7 @@ func (p *Pipeline) selectFair(tasks []detailTask) []detailTask {
 	if remaining > 0 {
 		newCount += min(remaining, len(newTasks)-newCount)
 	}
-	selected := make([]detailTask, 0, newCount+refreshCount)
+	selected = make([]detailTask, 0, newCount+refreshCount)
 	selected = append(selected, newTasks[:newCount]...)
 	selected = append(selected, refreshTasks[:refreshCount]...)
 	return selected

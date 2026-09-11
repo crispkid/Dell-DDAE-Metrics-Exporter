@@ -322,11 +322,13 @@ Prefix 最大長度是 128 bytes。可使用空字串，或由斜線分隔、各
 | `kafka.tls.client_key_file` | `KAFKA_CLIENT_KEY_FILE` | `""` | mTLS 私鑰檔案。 |
 | `kafka.tls.insecure_skip_verify` | `KAFKA_TLS_INSECURE_SKIP_VERIFY` | `false` | 受全域開關保護的 Kafka TLS 診斷設定。 |
 | `kafka.sasl.mechanism` | `KAFKA_SASL_MECHANISM` | `""` | 空字串、`PLAIN`、`SCRAM-SHA-256` 或 `SCRAM-SHA-512`。 |
-| `kafka.sasl.username` | `KAFKA_SASL_USERNAME` | `""` | 使用 SASL 時必填。 |
-| `kafka.sasl.password_file` | `KAFKA_SASL_PASSWORD_FILE` | `""` | 使用 SASL 時必填的密碼檔案；直接值替代設定為 `KAFKA_SASL_PASSWORD`。 |
+| `kafka.sasl.username` | `KAFKA_SASL_USERNAME` | `""` | 啟用事件輸出並使用 SASL 時必填，包含只輸出查詢事件的模式。 |
+| `kafka.sasl.password_file` | `KAFKA_SASL_PASSWORD_FILE` | `""` | 啟用事件輸出並使用 SASL 時必填；直接值替代設定為 `KAFKA_SASL_PASSWORD`。 |
 | `kafka.publish_timeout` | `KAFKA_PUBLISH_TIMEOUT` | `10s` | 傳送 timeout，至少 `1s`。 |
 
-Kafka 連線使用 TLS。請設定 broker 的 TLS listener，並確保 advertised broker 位址均可連線；部署範例中的 `9093` 是 listener port 範例。私有 CA 提供 CA bundle，mTLS 提供憑證／私鑰組，broker 要求 SASL 時再提供對應值。啟用的事件類型使用不同 topic；topic 名稱為 1–249 bytes，並須通過設定中的名稱驗證。
+Kafka 連線使用 TLS。請設定 broker 的 TLS listener，並確保 advertised broker 位址均可連線；部署範例中的 `9093` 是 listener port 範例。私有 CA 提供 CA bundle，mTLS 提供憑證／私鑰組，broker 要求 SASL 時再提供對應值。啟用的事件類型使用不同 topic；topic 名稱為 1–249 個 ASCII 字元，只使用 `[A-Za-z0-9._-]`，且排除 `.` 與 `..` 這兩個名稱。三種事件流程都會在載入設定時驗證名稱。
+
+告警、Serviceability Log 與查詢事件共用這些 SASL 設定。任一事件輸出使用 SASL 時，exporter 會在啟動時讀取並驗證帳號與密碼。帳密缺少或不合法時，設定錯誤會指出對應設定名稱。只收集查詢 metrics 或資源 metrics 的模式不會使用 Kafka 帳密。修改帳密後，請重新啟動 exporter。
 
 ### 持久化 State
 
@@ -342,7 +344,7 @@ Kafka 連線使用 TLS。請設定 broker 的 TLS listener，並確保 advertise
 | `state.serviceability_logs_checkpoint_retention` | `SERVICEABILITY_LOG_CHECKPOINT_RETENTION` | `720h` | Log checkpoint 保留時間，須為正值。 |
 | `state.serviceability_logs_checkpoint_max_records` | `SERVICEABILITY_LOG_CHECKPOINT_MAX_RECORDS` | `100000` | Log checkpoint 筆數上限，1–10000000。 |
 
-啟動時，各個啟用的流程會初始化自己的 bbolt 檔案與內部 bucket：
+啟動時，各個啟用的流程會建立或驗證自己的 bbolt 檔案與內部 bucket：
 
 | 流程 | `state.dir` 內的檔案 |
 |---|---|
@@ -504,6 +506,8 @@ chmod 600 config.query.local.yaml
 收集完成後，在 `/metrics` 確認 `ddae_query_collection_success 1`、`ddae_query_detail_collection_success 1`、`ddae_query_scope_all 1`，並檢查 `/readyz`。執行中／排隊中的 gauge 反映目前收集到的查詢狀態。
 
 要在整合的告警／Log 設定中加入查詢事件，將 `monitoring.queries` 設定複製至該設定檔，啟用 `enabled: true` 與 `events_enabled: true`，並建立專用的 `kafka_topic`，例如 `ddae-queries`。查詢事件共用 Kafka 傳輸設定，並使用獨立 outbox。事件欄位與已觀測歷史資料的語意，請參閱[查詢監控指南](docs/query-monitoring.md)。
+
+只輸出查詢事件時，在 `config.query.local.yaml` 保持資源、告警與 Serviceability Log 關閉，設定 `monitoring.queries.events_enabled: true` 與專用的 `kafka_topic`，再依前述 Kafka 步驟設定 `kafka.brokers`、TLS 與所需的 SASL 帳密。使用同一個查詢設定啟動指令重新啟動。檢查 `/readyz`；送出來源中可取得的查詢紀錄後，確認 `/metrics` 的 `ddae_query_event_publish_success 1`，且 `ddae_query_events_pending` 待傳送數量逐步減少。將前述 Kafka consumer 指令改用查詢 topic，確認事件已送達。
 
 ### Serviceability Log 與查詢歷史回補
 
@@ -750,6 +754,8 @@ Configured、capacity 與 allocatable 各自保留原本的資源語意，適合
 
 `/healthz` 代表 process liveness。`/readyz` 評估已啟用流程，包含資料新鮮度與必要 state 的健康狀態。Metrics handler 提供已收集的狀態，handler timeout 為 `9s`，最多同時處理 `5` 個 request。
 
+資源 readiness 與 `ddae_up` 會逐一檢查必要資料群組本身的 `CollectedAt`、資料是否存在，以及採集是否成功。較晚完成的採集週期不會延長舊資料的有效時間。告警容量健康狀態也包含 checkpoint：達到 `CHECKPOINT_MAX_ALERTS` 時，即使 outbox 已空，仍回報滿額。已不在來源清單且符合保留期限的 checkpoint 會依設定清理，恢復容量；待送事件的 checkpoint 則持續受到保護。
+
 Logs 預設採 `info` 等級的結構化 JSON；可依需求切換為 `text` 或其他設定等級。依部署方式查看前景輸出、`docker logs`、`kubectl logs` 或 systemd journal。分享診斷輸出時，請保留敏感資訊遮蔽措施。
 
 ## 安全性
@@ -847,6 +853,8 @@ kubectl -n "$NAMESPACE" logs deployment/ddae-exporter --tail=100
 ### State Lock、識別或權限錯誤
 
 確認前一個 process 已停止，同一目錄只有一個 writer。檢查實際 UID 的擁有者設定與掛載寫入權限。保留既有 state，修改識別或復原設定前先閱讀[維運指南](docs/runbook.md)。
+
+查詢 state 會在保留期限清理與 replay 前，驗證來源識別、事件欄位白名單、計數，以及可核對的 checkpoint 關聯。只有 `query-events.db` 不存在時才建立新檔；既有檔案若為空白、損毀或內容不一致，查詢流程會停止啟動並保留檔案供調查。還原後啟動失敗時，保留所有 state files，核對設定與備份的來源識別。請與維運人員協調使用正常停止 writer 後取得的有效備份復原，保留待送事件與累計值。復原後檢查 `/readyz`、查詢採集 metrics 與待送事件數量；保留期限與復原邊界詳見維運指南。
 
 ## 文件索引
 

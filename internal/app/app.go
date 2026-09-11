@@ -27,9 +27,7 @@ import (
 )
 
 type BuildInfo struct {
-	Version   string
-	Revision  string
-	BuildDate string
+	Version string
 }
 
 type worker interface {

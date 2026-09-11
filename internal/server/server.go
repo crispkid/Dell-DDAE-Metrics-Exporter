@@ -13,8 +13,6 @@ import (
 
 type Server struct {
 	http                      *http.Server
-	state                     *snapshot.Store
-	staleAfter                time.Duration
 	resourcesEnabled          bool
 	alertsEnabled             bool
 	serviceabilityLogsEnabled bool
@@ -35,7 +33,6 @@ func New(address string, registry prometheus.Gatherer, state *snapshot.Store, st
 		mode = modes[0]
 	}
 	server := &Server{
-		state: state, staleAfter: staleAfter,
 		resourcesEnabled: mode.ResourcesEnabled, alertsEnabled: mode.AlertsEnabled,
 		serviceabilityLogsEnabled: mode.ServiceabilityLogsEnabled,
 	}

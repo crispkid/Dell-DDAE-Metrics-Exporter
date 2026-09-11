@@ -137,12 +137,7 @@ func (s *querySource) List(ctx context.Context, w historystate.Window) (Page, er
 	return queryPage(body, s.max)
 }
 func (s *querySource) Record(ctx context.Context, i historystate.Item) error {
-	observed := time.Now().UTC()
-	body, err := s.client.Get(ctx, "/ui/api/insights/history/queries/"+i.ID)
-	if err != nil {
-		return err
-	}
-	e, err := queryclient.DecodeDetail(body, i.ID, s.source, observed)
+	e, err := queryclient.FetchDetail(ctx, s.client, i.ID, s.source)
 	if err != nil {
 		return err
 	}

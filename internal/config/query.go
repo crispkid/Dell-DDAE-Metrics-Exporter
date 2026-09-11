@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/url"
 	"regexp"
-	"strings"
 	"time"
 )
 
@@ -94,7 +93,7 @@ func loadQuery(lookup lookupFunc, readFile func(string) ([]byte, error), allow b
 	}
 	if q.Events {
 		q.Topic = optionalText(lookup, "QUERY_KAFKA_TOPIC", "")
-		if len(q.Topic) == 0 || len(q.Topic) > 249 || strings.ContainsAny(q.Topic, "\x00\r\n\t ") {
+		if !validKafkaTopic(q.Topic) {
 			return q, errors.New("QUERY_KAFKA_TOPIC is required and must be valid")
 		}
 	}

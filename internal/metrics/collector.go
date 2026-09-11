@@ -296,7 +296,7 @@ func optional(output chan<- prometheus.Metric, descriptor *prometheus.Desc, valu
 }
 
 func current(at time.Time, present bool, now time.Time, staleAfter time.Duration) bool {
-	return present && !at.IsZero() && now.Sub(at) <= staleAfter
+	return snapshot.Current(at, present, now, staleAfter)
 }
 
 func boolean(value bool) float64 {

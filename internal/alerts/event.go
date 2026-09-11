@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -373,5 +372,3 @@ func copyInt(value *int64) *int64 {
 	copy := *value
 	return &copy
 }
-
-var _ = fmt.Sprintf

@@ -127,6 +127,10 @@ func textValid(s string, required bool) bool {
 	return (!required || s != "") && len(s) <= 1024 && utf8.ValidString(s) && !strings.ContainsAny(s, "\x00\r\n")
 }
 func DecodeDetail(body []byte, id, source string, now time.Time) (Event, error) {
+	return decodeDetail(body, id, source, now, now)
+}
+
+func decodeDetail(body []byte, id, source string, observed, now time.Time) (Event, error) {
 	var wire struct {
 		ID        string     `json:"queryId"`
 		State     string     `json:"state"`
@@ -145,7 +149,7 @@ func DecodeDetail(body []byte, id, source string, now time.Time) (Event, error) 
 	if wire.Completed != nil && (wire.Completed.Before(wire.Submitted) || wire.Completed.After(now.Add(5*time.Second))) {
 		return Event{}, ErrSchema
 	}
-	e := Event{SourceInstance: source, QueryID: id, User: wire.User, Source: wire.Source, State: State(wire.State), Submitted: wire.Submitted, Completed: wire.Completed, Observed: now}
+	e := Event{SourceInstance: source, QueryID: id, User: wire.User, Source: wire.Source, State: State(wire.State), Submitted: wire.Submitted, Completed: wire.Completed, Observed: observed}
 	if Terminal(e.State) && (e.Completed == nil || wire.Elapsed == nil) {
 		return Event{}, ErrSchema
 	}

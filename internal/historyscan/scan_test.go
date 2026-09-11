@@ -15,7 +15,6 @@ type testSource struct {
 	seen  map[string]int
 	cap   int
 	calls int
-	fail  bool
 }
 
 func (s *testSource) List(_ context.Context, w historystate.Window) (Page, error) {

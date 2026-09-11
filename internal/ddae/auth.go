@@ -42,9 +42,8 @@ type tokenRefresh struct {
 }
 
 type tokenRefreshResult struct {
-	lease     tokenLease
-	refreshAt time.Time
-	err       error
+	lease tokenLease
+	err   error
 }
 
 func (m *tokenManager) get(ctx context.Context, rejectedGeneration uint64) (tokenLease, error) {
@@ -72,7 +71,7 @@ func (m *tokenManager) get(ctx context.Context, rejectedGeneration uint64) (toke
 	m.mu.Unlock()
 
 	token, refreshAt, err := m.requestWithRetry(ctx)
-	result := tokenRefreshResult{lease: tokenLease{token: token, generation: nextGeneration}, refreshAt: refreshAt, err: err}
+	result := tokenRefreshResult{lease: tokenLease{token: token, generation: nextGeneration}, err: err}
 	m.mu.Lock()
 	if err == nil {
 		m.token = token

@@ -322,11 +322,13 @@ For each enabled Management API pipeline, keep `request_timeout < cycle_timeout 
 | `kafka.tls.client_key_file` | `KAFKA_CLIENT_KEY_FILE` | `""` | mTLS private-key file. |
 | `kafka.tls.insecure_skip_verify` | `KAFKA_TLS_INSECURE_SKIP_VERIFY` | `false` | Guarded Kafka TLS diagnostic setting. |
 | `kafka.sasl.mechanism` | `KAFKA_SASL_MECHANISM` | `""` | Empty, `PLAIN`, `SCRAM-SHA-256`, or `SCRAM-SHA-512`. |
-| `kafka.sasl.username` | `KAFKA_SASL_USERNAME` | `""` | Required with SASL. |
-| `kafka.sasl.password_file` | `KAFKA_SASL_PASSWORD_FILE` | `""` | Required password file with SASL; direct alternative `KAFKA_SASL_PASSWORD`. |
+| `kafka.sasl.username` | `KAFKA_SASL_USERNAME` | `""` | Required when an event output and SASL are enabled, including query-only events. |
+| `kafka.sasl.password_file` | `KAFKA_SASL_PASSWORD_FILE` | `""` | Required with event output and SASL; direct alternative `KAFKA_SASL_PASSWORD`. |
 | `kafka.publish_timeout` | `KAFKA_PUBLISH_TIMEOUT` | `10s` | Publish timeout, at least `1s`. |
 
-Kafka connections use TLS. Use your broker's TLS listener and reachable advertised broker addresses; `9093` in the deployment example is an example listener port. Supply a CA bundle for private trust, a certificate/key pair for mTLS, and SASL values when your broker requires them. Use distinct topics for enabled event types. Topic names are 1–249 bytes and must pass the configured name validation.
+Kafka connections use TLS. Use your broker's TLS listener and reachable advertised broker addresses; `9093` in the deployment example is an example listener port. Supply a CA bundle for private trust, a certificate/key pair for mTLS, and SASL values when your broker requires them. Use distinct topics for enabled event types. Topic names contain 1–249 ASCII characters from `[A-Za-z0-9._-]`, excluding the names `.` and `..`. All three event pipelines validate these names at configuration loading.
+
+Alerts, Serviceability Logs, and query events share these SASL settings. When any event output uses SASL, the exporter loads and validates its username and password at startup. Missing or invalid credentials produce a configuration error naming the affected setting. Query metrics-only and resources-only profiles leave Kafka credentials unused. Restart the exporter after changing credentials.
 
 ### Persistent state
 
@@ -342,7 +344,7 @@ Kafka connections use TLS. Use your broker's TLS listener and reachable advertis
 | `state.serviceability_logs_checkpoint_retention` | `SERVICEABILITY_LOG_CHECKPOINT_RETENTION` | `720h` | Positive Log checkpoint retention. |
 | `state.serviceability_logs_checkpoint_max_records` | `SERVICEABILITY_LOG_CHECKPOINT_MAX_RECORDS` | `100000` | Log checkpoint count, 1–10000000. |
 
-At startup, the enabled pipelines initialize their bbolt files and internal buckets:
+At startup, enabled pipelines create or validate their bbolt files and internal buckets:
 
 | Pipeline | File under `state.dir` |
 |---|---|
@@ -504,6 +506,8 @@ Edit `monitoring.queries` with the real origins, realm, role, absolute credentia
 After collection, check `ddae_query_collection_success 1`, `ddae_query_detail_collection_success 1`, and `ddae_query_scope_all 1` on `/metrics`, along with `/readyz`. The running/queued gauges reflect current collected query state.
 
 To add query events to the combined alert/Log profile, copy the `monitoring.queries` settings into that profile, set `enabled: true` and `events_enabled: true`, and provision a dedicated `kafka_topic` such as `ddae-queries`. It shares the configured Kafka transport and uses an independent outbox. See [query monitoring](docs/query-monitoring.md) for the event fields and observed-history semantics.
+
+For query-only events, keep resources, alerts, and Serviceability Logs disabled in `config.query.local.yaml`, set `monitoring.queries.events_enabled: true` and a dedicated `kafka_topic`, then configure `kafka.brokers`, TLS, and any required SASL credentials using the Kafka setup above. Restart with the same query-profile command. Verify `/readyz` and, after publishing an available query record, `ddae_query_event_publish_success 1` and a draining `ddae_query_events_pending` on `/metrics`. Confirm delivery with the Kafka consumer command above, using the query topic.
 
 ### Serviceability Log and query history backfill
 
@@ -750,6 +754,8 @@ Configured, capacity, and allocatable resource values retain their respective me
 
 `/healthz` is process liveness. `/readyz` evaluates the enabled pipelines, including freshness and required state health. The metrics handler serves collected state with a `9s` handler timeout and a maximum of `5` simultaneous requests.
 
+Resource readiness and `ddae_up` check each required family's own `CollectedAt`, presence and collection success. A later cycle completion does not renew older data. Alert capacity health includes checkpoints: reaching `CHECKPOINT_MAX_ALERTS` reports full even with an empty outbox. Eligible absent checkpoints recover capacity through the configured retention policy; pending events keep their checkpoints protected.
+
 Logs use structured JSON at `info` by default; select `text` or another configured level when needed. View foreground output, `docker logs`, `kubectl logs`, or the systemd journal for your deployment. Preserve redaction when sharing diagnostic output.
 
 ## Security
@@ -847,6 +853,8 @@ Run the commands for your deployment mode. Check image architecture and pull acc
 ### State lock, identity, or permission error
 
 Ensure the previous process has stopped and only one writer uses the directory. Verify ownership and mount write access for the effective UID. Retain existing state and review the [runbook](docs/runbook.md) before changing identity or recovery settings.
+
+Query state validation protects the stored source, event allowlist, counters and verifiable checkpoint relationships before retention and replay. The exporter creates `query-events.db` only when it does not exist; an existing empty, damaged or inconsistent file stops query startup and remains available for investigation. After a failed restore, keep all state files and compare the configured source with the backup's source. Coordinate restoration of a known-good, stopped-writer backup with the operator; retain pending events and cumulative counts. After recovery, verify `/readyz`, query collection metrics and the pending-event count. See the runbook for retention and recovery boundaries.
 
 ## Documentation
 

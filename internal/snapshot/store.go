@@ -361,5 +361,24 @@ func requiredCurrent(view View, now time.Time, staleAfter time.Duration) bool {
 			return false
 		}
 	}
+	for _, family := range []struct {
+		at      time.Time
+		present bool
+	}{
+		{view.Ping.CollectedAt, view.Ping.Present},
+		{view.Clusters.CollectedAt, view.Clusters.Present},
+		{view.Nodes.CollectedAt, view.Nodes.Present},
+		{view.Lock.CollectedAt, view.Lock.Present},
+		{view.Power.CollectedAt, view.Power.Present},
+	} {
+		if !Current(family.at, family.present, now, staleAfter) {
+			return false
+		}
+	}
 	return true
+}
+
+// Current applies the same freshness boundary to health and individual metrics.
+func Current(at time.Time, present bool, now time.Time, staleAfter time.Duration) bool {
+	return present && !at.IsZero() && now.Sub(at) <= staleAfter
 }

@@ -237,3 +237,35 @@ DDAE-5 or DDAE-6. Native Windows and DDAE rows remain environment-dependent.
 | REQ-DDAE-10-007 | 2.6.0 | AC-DDAE-10-007 | bounded durable time windows | TASK-DDAE-10-007 | `path:internal/historyscan/scan.go` | TEST-DDAE-10-007 | `test` | `stage:test` | Implemented |
 | REQ-DDAE-10-008 | 2.6.0 | AC-DDAE-10-008 | bounded durable time windows | TASK-DDAE-10-004, TASK-DDAE-10-008 | `path:internal/historyscan/scan.go` | TEST-DDAE-10-008 | `test` | `stage:test` | Implemented |
 | REQ-DDAE-10-009 | 2.6.0 | AC-DDAE-10-009 | bounded durable time windows | TASK-DDAE-10-009 | `path:internal/config/yaml.go` | TEST-DDAE-10-009 | `test` | `stage:test` | Implemented |
+
+## DDAE-11 Requirement Trace
+
+| Requirement ID | Specification version | Acceptance IDs | Design decision | Task IDs | Implementation | Test IDs | Harness stage | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| REQ-DDAE-11-001 | 2.7.0 | AC-DDAE-11-001 | Include query events in the existing SASL loader predicate | TASK-DDAE-11-001, TASK-DDAE-11-004 | `path:internal/config/config.go` | TEST-DDAE-11-001 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-11-002 | 2.7.0 | AC-DDAE-11-002 | Include query events in the existing SASL loader predicate | TASK-DDAE-11-002, TASK-DDAE-11-004 | `path:internal/config/config.go` | TEST-DDAE-11-002 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-11-003 | 2.7.0 | AC-DDAE-11-003 | Include query events in the existing SASL loader predicate | TASK-DDAE-11-003, TASK-DDAE-11-004 | `path:internal/config/config.go` | TEST-DDAE-11-003 | `test` | `stage:test` | Implemented |
+
+Inherited trace rows remain unchanged. Local test success alone does not close
+full handoff or independent-review gates.
+
+
+## DDAE-12 Requirement Trace
+
+| Requirement ID | Specification version | Acceptance IDs | Design decision | Task IDs | Implementation | Test IDs | Harness stage | Evidence | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| REQ-DDAE-12-001 | 2.8.0 | AC-DDAE-12-001 | Candidate-scoped data-preserving correction | TASK-DDAE-12-001 | `path:internal/outbox/store.go` | TEST-DDAE-12-001 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-12-002 | 2.8.0 | AC-DDAE-12-002 | Candidate-scoped data-preserving correction | TASK-DDAE-12-002 | `path:internal/alerts/pipeline.go` | TEST-DDAE-12-002 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-12-003 | 2.8.0 | AC-DDAE-12-003 | Candidate-scoped data-preserving correction | TASK-DDAE-12-003 | `path:internal/snapshot/store.go` | TEST-DDAE-12-003 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-12-004 | 2.8.0 | AC-DDAE-12-004 | Candidate-scoped data-preserving correction | TASK-DDAE-12-004 | `path:internal/ddae/types.go` | TEST-DDAE-12-004 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-12-005 | 2.8.0 | AC-DDAE-12-005 | Candidate-scoped data-preserving correction | TASK-DDAE-12-005 | `path:internal/querystate/store.go` | TEST-DDAE-12-005 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-12-006 | 2.8.0 | AC-DDAE-12-006 | Candidate-scoped data-preserving correction | TASK-DDAE-12-006 | `path:internal/queryclient/types.go` | TEST-DDAE-12-006 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-12-007 | 2.8.0 | AC-DDAE-12-007 | Candidate-scoped data-preserving correction | TASK-DDAE-12-007 | `path:internal/outbox/store.go` | TEST-DDAE-12-007 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-12-008 | 2.8.0 | AC-DDAE-12-008 | Candidate-scoped data-preserving correction | TASK-DDAE-12-008 | `path:internal/config/config.go` | TEST-DDAE-12-008 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-12-009 | 2.8.0 | AC-DDAE-12-009 | Candidate-scoped data-preserving correction | TASK-DDAE-12-009 | `path:internal/app/app.go` | TEST-DDAE-12-009 | `test` | `stage:test` | Implemented |
+| REQ-DDAE-12-010 | 2.8.0 | AC-DDAE-12-010 | Candidate-scoped data-preserving correction | TASK-DDAE-12-010 | `path:docs/runbook.md` | TEST-DDAE-12-010 | `test` | `stage:test` | Implemented |
+
+These rows govern the affected behavior and are Implemented with local regression evidence
+recorded in plans/DDAE-12.md. Full handoff and independent review remain open; inherited
+records retain historical status and are not claimed as newly Verified. Superseded descriptions
+are explicit in DDAE-12; all valuable earlier regression tests remain required.

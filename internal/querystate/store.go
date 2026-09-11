@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"time"
@@ -69,41 +70,57 @@ func Open(o Options) (*Store, error) {
 		return nil, errors.New("query state directory permissions failed")
 	}
 	path := filepath.Join(o.Dir, "query-events.db")
-	if info, err := os.Lstat(path); err == nil && (!info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
-		return nil, errors.New("query state must be regular file")
+	info, statErr := os.Lstat(path)
+	fresh := errors.Is(statErr, os.ErrNotExist)
+	if statErr != nil && !fresh {
+		return nil, errors.New("query state file unavailable")
 	}
-	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: time.Second})
+	if !fresh && (!info.Mode().IsRegular() || info.Size() == 0) {
+		return nil, errCorrupt
+	}
+	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: time.Second, OpenFile: func(name string, flags int, mode os.FileMode) (*os.File, error) {
+		// Never recreate an existing path, or initialize a file that won a race
+		// with our existence check. Existing inode changes fail closed.
+		if fresh {
+			flags |= os.O_EXCL
+		} else {
+			flags &^= os.O_CREATE
+		}
+		file, err := os.OpenFile(name, flags, mode)
+		if err != nil {
+			return nil, err
+		}
+		opened, err := file.Stat()
+		if err != nil || !opened.Mode().IsRegular() || !fresh && !os.SameFile(info, opened) {
+			file.Close()
+			return nil, errCorrupt
+		}
+		return file, nil
+	}})
 	if err != nil {
 		return nil, errors.New("query state open failed")
 	}
 	s := &Store{db: db, options: o}
-	err = db.Update(func(tx *bolt.Tx) error {
-		m := tx.Bucket(meta)
-		if m != nil {
-			if string(m.Get([]byte("version"))) != "1" || string(m.Get([]byte("source"))) != o.Source {
-				return errors.New("query state schema or source mismatch")
-			}
-			for _, name := range [][]byte{checkpoints, events} {
-				if tx.Bucket(name) == nil {
-					return errors.New("query state corrupt")
+	if fresh {
+		err = db.Update(func(tx *bolt.Tx) error {
+			for _, name := range [][]byte{meta, checkpoints, events} {
+				if _, err := tx.CreateBucket(name); err != nil {
+					return err
 				}
 			}
-			return nil
-		}
-		for _, name := range [][]byte{meta, checkpoints, events} {
-			if _, err := tx.CreateBucket(name); err != nil {
+			m := tx.Bucket(meta)
+			if err := m.Put([]byte("version"), []byte("1")); err != nil {
 				return err
 			}
-		}
-		m = tx.Bucket(meta)
-		if err := m.Put([]byte("version"), []byte("1")); err != nil {
-			return err
-		}
-		if err := m.Put([]byte("source"), []byte(o.Source)); err != nil {
-			return err
-		}
-		return saveStats(tx, emptyStats())
-	})
+			if err := m.Put([]byte("source"), []byte(o.Source)); err != nil {
+				return err
+			}
+			return saveStats(tx, emptyStats())
+		})
+	} else {
+		// Validation is read-only and precedes retention or any other DB write.
+		err = db.View(s.validate)
+	}
 	if err == nil {
 		err = os.Chmod(path, 0600)
 	}
@@ -118,14 +135,15 @@ func Open(o Options) (*Store, error) {
 	return s, nil
 }
 func readStats(tx *bolt.Tx) (Stats, error) {
-	s := emptyStats()
-	b := tx.Bucket(meta).Get([]byte("stats"))
-	if len(b) == 0 || json.Unmarshal(b, &s) != nil || s.Completed == nil || s.Histograms == nil || s.Pending < 0 || s.Bytes < 0 {
-		return s, errors.New("query aggregate corrupt")
+	if tx.Bucket(meta) == nil {
+		return Stats{}, errCorrupt
 	}
-	return s, nil
+	return decodeStats(tx.Bucket(meta).Get([]byte("stats")))
 }
 func saveStats(tx *bolt.Tx, s Stats) error {
+	if s.Revision == math.MaxUint64 {
+		return errCorrupt
+	}
 	s.Revision++
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -146,9 +164,9 @@ func (s *Store) Prune(now time.Time) error {
 		a.Floor = floor
 		c := tx.Bucket(checkpoints).Cursor()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
-			var cp checkpoint
-			if json.Unmarshal(v, &cp) != nil {
-				return errors.New("query checkpoint corrupt")
+			cp, err := decodeCheckpoint(k, v)
+			if err != nil {
+				return err
 			}
 			if cp.Time.Before(floor) {
 				if err := c.Delete(); err != nil {
@@ -166,26 +184,22 @@ func (s *Store) Fetch(id string) (bool, time.Time, error) {
 		if v == nil {
 			return nil
 		}
-		if json.Unmarshal(v, &cp) != nil {
-			return errors.New("query checkpoint corrupt")
-		}
-		return nil
+		var err error
+		cp, err = decodeCheckpoint([]byte(id), v)
+		return err
 	})
 	return cp.Final, cp.LastFetched, err
 }
 func (s *Store) Record(e queryclient.Event) error {
-	if e.SourceInstance != s.options.Source || !queryclient.ValidID(e.QueryID) {
-		return errors.New("query record identity invalid")
+	if validateEvent(e, s.options.Source) != nil {
+		return errors.New("query record invalid")
 	}
-	stable := e
-	stable.Observed = time.Time{}
-	canonical, err := json.Marshal(stable)
+	hash, err := eventHash(e)
 	if err != nil {
 		return err
 	}
-	hash := sha256.Sum256(canonical)
 	payload, err := json.Marshal(e)
-	if err != nil || len(payload) > 64<<10 {
+	if err != nil || len(payload) > maxEventBytes {
 		return errors.New("query event exceeds bounds")
 	}
 	return s.db.Update(func(tx *bolt.Tx) error {
@@ -204,8 +218,9 @@ func (s *Store) Record(e queryclient.Event) error {
 		v := b.Get([]byte(e.QueryID))
 		var previous checkpoint
 		if v != nil {
-			if json.Unmarshal(v, &previous) != nil {
-				return errors.New("query checkpoint corrupt")
+			previous, err = decodeCheckpoint([]byte(e.QueryID), v)
+			if err != nil {
+				return err
 			}
 			if previous.Final || e.Observed.Before(previous.LastFetched) {
 				return nil
@@ -216,7 +231,7 @@ func (s *Store) Record(e queryclient.Event) error {
 		}
 		changed := v == nil || previous.Hash != hash
 		if changed && s.options.Events {
-			if a.Pending >= s.options.MaxEvents || a.Bytes+int64(len(payload)) > s.options.MaxBytes {
+			if a.Pending >= s.options.MaxEvents || int64(len(payload)) > s.options.MaxBytes-a.Bytes {
 				return ErrFull
 			}
 			eb := tx.Bucket(events)
@@ -233,6 +248,9 @@ func (s *Store) Record(e queryclient.Event) error {
 			a.Bytes += int64(len(payload))
 		}
 		if queryclient.Terminal(e.State) {
+			if a.Completed[e.State] == math.MaxUint64 {
+				return errCorrupt
+			}
 			a.Completed[e.State]++
 			for _, v := range []struct {
 				name  string
@@ -291,21 +309,25 @@ func (s *Store) Records(limit int) ([]Record, error) {
 	}
 	var result []Record
 	err := s.db.View(func(tx *bolt.Tx) error {
+		a, err := readStats(tx)
+		if err != nil {
+			return err
+		}
 		c := tx.Bucket(events).Cursor()
 		for k, v := c.First(); k != nil && len(result) < limit; k, v = c.Next() {
-			if len(k) != 8 {
-				return errors.New("query sequence corrupt")
-			}
-			var e queryclient.Event
-			if json.Unmarshal(v, &e) != nil || !queryclient.ValidID(e.QueryID) {
-				return errors.New("query outbox corrupt")
+			e, err := s.validateRecord(tx, k, v, a.Floor)
+			if err != nil {
+				return err
 			}
 			key := sha256.Sum256([]byte(e.SourceInstance + "\x00" + e.QueryID))
 			result = append(result, Record{binary.BigEndian.Uint64(k), append([]byte(nil), key[:]...), append([]byte(nil), v...)})
 		}
 		return nil
 	})
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 func (s *Store) Ack(seq uint64) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
@@ -318,6 +340,9 @@ func (s *Store) Ack(seq uint64) error {
 		}
 		a, err := readStats(tx)
 		if err != nil {
+			return err
+		}
+		if _, err := s.validateRecord(tx, key, v, a.Floor); err != nil {
 			return err
 		}
 		a.Pending--

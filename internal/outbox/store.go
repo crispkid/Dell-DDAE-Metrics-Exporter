@@ -282,6 +282,7 @@ func (s *Store) Acknowledge(sequence uint64) error {
 			return CorruptionError{reason: "outbox record has no matching checkpoint"}
 		}
 		newestPending := ""
+		var newestPendingSequence uint64
 		cursor := outbox.Cursor()
 		for _, candidate := cursor.First(); candidate != nil; _, candidate = cursor.Next() {
 			var queued Record
@@ -290,13 +291,14 @@ func (s *Store) Acknowledge(sequence uint64) error {
 			}
 			if queued.AlertID == record.AlertID {
 				newestPending = queued.ContentHash
+				newestPendingSequence = queued.Sequence
 			}
 		}
 		if checkpoint.PendingHash != newestPending {
 			return CorruptionError{reason: "checkpoint pending hash mismatch"}
 		}
 		checkpoint.DeliveredHash = record.ContentHash
-		if checkpoint.PendingHash == record.ContentHash {
+		if sequence == newestPendingSequence {
 			checkpoint.PendingHash = ""
 		}
 		if err := putCheckpoint(checkpointBucket, checkpoint); err != nil {
@@ -330,7 +332,7 @@ func (s *Store) Stats() (Stats, error) {
 		meta := tx.Bucket(bucketMeta)
 		result.Events = int(readUint64(meta.Get(keyEventCount)))
 		result.Bytes = int64(readUint64(meta.Get(keyEventBytes)))
-		result.Full = result.Events >= s.maxEvents || result.Bytes >= s.maxBytes
+		result.Full = result.Events >= s.maxEvents || result.Bytes >= s.maxBytes || tx.Bucket(bucketCheckpoints).Stats().KeyN >= s.maxCheckpoints
 		return nil
 	})
 	return result, err
@@ -349,8 +351,10 @@ func (s *Store) ReconcileListed(listed map[string]struct{}, now time.Time, compl
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(bucketCheckpoints)
 		var deleteKeys [][]byte
+		count := 0
 		cursor := bucket.Cursor()
 		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+			count++
 			checkpoint, err := readCheckpoint(value)
 			if err != nil {
 				return err
@@ -373,13 +377,8 @@ func (s *Store) ReconcileListed(listed map[string]struct{}, now time.Time, compl
 				return err
 			}
 		}
-		count := bucket.Stats().KeyN
-		if count <= s.maxCheckpoints {
-			return nil
-		}
-		if count > s.maxCheckpoints {
-			full = true
-		}
+		// Bucket.Stats may still describe the pre-delete pages in this transaction.
+		full = count-len(deleteKeys) >= s.maxCheckpoints
 		return nil
 	})
 	if err != nil {

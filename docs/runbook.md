@@ -40,6 +40,18 @@ plaintext secret values.
 Do not place secret values in ConfigMaps, environment files, command arguments,
 container image layers, logs or Harness evidence.
 
+Kafka SASL credentials apply whenever alerts, Serviceability Logs or query events
+are enabled, including query-only events. Set `kafka.sasl.mechanism` to `PLAIN`,
+`SCRAM-SHA-256` or `SCRAM-SHA-512`, supply `kafka.sasl.username` and a readable
+`kafka.sasl.password_file`, and retain the broker's TLS configuration. Environment
+overrides are `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_USERNAME` and
+`KAFKA_SASL_PASSWORD_FILE` (or the direct password alternative, not both).
+Missing/invalid required credentials fail configuration loading before startup;
+correct the named setting and restart. Query metrics-only/resources-only profiles
+do not read Kafka credentials. After replacing a binary or changing credentials,
+restart and verify readiness plus query publish/backlog metrics as described in
+the README. Preserve all outbox files during authentication recovery.
+
 Set `ddae.paths.ping_prefix` and `ddae.paths.api_prefix` for the actual gateway
 before rollout. Omitted settings use an empty Ping prefix and `/v1` API prefix,
 producing `/ping` and `/v1/*`. A gateway that still requires v1.0.0-rc2 routes
@@ -204,6 +216,48 @@ exporter instance running with either target's insecure TLS mode is ineligible.
 Use [Query monitoring](query-monitoring.md) for independent credentials, role scope,
 Insights/identity-provider egress, durable query state and Kafka recovery. Existing
 resource/alert/log settings are unchanged.
+
+### State integrity and recovery
+
+`query-events.db` schema 1 is validated before startup retention pruning. Only an
+absent database is initialized; existing empty/truncated files, schema/source
+mismatches, malformed checkpoints, inconsistent pending count/bytes, and invalid
+persisted events stop startup with bounded errors. Replay validates the event
+allowlist and source again before returning bytes to the Kafka publisher.
+Extra fields, including SQL text, are rejected rather than silently stripped.
+Keep the original DB for investigation; automatic reset, repair and migration are
+not part of this operation. Startup logs remain redacted and do not dump DB payloads.
+
+Before restoring, stop the only writer and retain all state files, including
+`history-backfill.db`. Confirm source identity, backup completeness, permissions
+and the configured retention before coordinating a known-good backup restore.
+Restoring older state can replay previously delivered events and restore earlier
+cumulative values; consumers must retain their existing deduplication behavior.
+Verify query collection/scope metrics, `/readyz` and the pending count after recovery.
+
+Retention can legitimately remove a checkpoint while keeping an older pending
+event. Such events remain eligible for delivery. Terminal pending events within
+the persisted retention floor require their matching final checkpoint. Multiple
+nonterminal historical events and metrics-only checkpoint updates remain valid;
+their hashes need not all equal the latest checkpoint. Completed counters and
+histograms are cumulative and are not rebuilt from the remaining outbox.
+
+### Freshness, capacity and topic checks
+
+Resource readiness uses each required family's `CollectedAt`, presence and
+collector success, not just the latest cycle completion. Inspect individual
+collector success and `ddae_management_api_up` when `/readyz` is not ready.
+Represented null node pressure makes node collection incomplete while retaining
+other usable fields. Alert capacity includes `CHECKPOINT_MAX_ALERTS`: equality
+is full even with no buffered events. Only eligible absent, non-pending checkpoints
+are removed by retention; preserve pending data while resolving capacity pressure.
+
+All Kafka event topic names use 1–249 ASCII characters from `[A-Za-z0-9._-]`;
+`.` and `..` are rejected during configuration loading. Keep enabled event topics
+distinct and confirm broker ACLs after correcting a name. Alert/Log detail attempts
+rotate within their existing class quotas even when a request fails. Live query
+and backfill detail validation use response time for the five-second future-time
+tolerance while retaining request-start observation order.
 
 ## Bounded history recovery
 

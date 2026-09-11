@@ -347,9 +347,12 @@ func decodeNodeConditions(data json.RawMessage) ([]NodeCondition, error) {
 		if err != nil {
 			return nil, err
 		}
+		condition := NodeCondition{Type: field.typeName}
 		if status != nil {
-			conditions = append(conditions, NodeCondition{Type: field.typeName, Status: *status})
+			condition.Status = *status
 		}
+		// A represented null is invalid, just like a null legacy array status.
+		conditions = append(conditions, condition)
 	}
 	return conditions, nil
 }

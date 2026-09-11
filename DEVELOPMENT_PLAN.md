@@ -336,3 +336,50 @@ This approval covers the 2.4.0 requirements, plan and tests. The original
 ### Execution Plan Reference
 
 - Execution Plan: plans/DDAE-10.md
+
+## DDAE-11 Query-only Kafka SASL credential loading
+
+### Approval Record
+
+- Requirements Confirmed Status: confirmed
+- Requirements Confirmed By: Current repository user in this Codex conversation
+- Requirements Confirmer Role: Requesting user / Requirements Approver
+- Requirements Confirmed On: 2026-09-11
+- Requirements Confirmation Evidence: User replied "Ok" to the explicit request to approve plans/DDAE-11-query-kafka-sasl-candidate.md, SHA256 7f213471d37ef90860b890f7ea76cb0dcd313554aab427122ffe2330cde884f8.
+- Implementation Plan Approved Status: approved
+- Implementation Plan Approved By: Current repository user in this Codex conversation
+- Implementation Plan Approver Role: Requesting user / Implementation Plan Approver
+- Implementation Plan Approved On: 2026-09-11
+- Implementation Plan Approval Evidence: The same explicit "Ok" approves the linked candidate requirements, one-line loader correction, regression matrix, documentation and preserved gates. Canonical headings/tables administratively transcribe that approval, without claiming the user typed canonical digests.
+- Approved Specification Version: 2.7.0
+- Approved Specification Digest: sha256:ff3ace3046a591f584ae9f678caa3d43e8e399031ddb78e6a31f9e4ee9cb8192
+- Approved Plan Basis Digest: sha256:ffd167f2de22d16c302972cbe4264bc3999d38f6500f889ad9b108e2048176f0
+- Approved Test Plan Digest: sha256:9ed0754b09e93d166f31df8a6923f6b1753d3385daf1bf61fef4368835ffacd9
+
+### Execution Plan Reference
+
+- Execution Plan: plans/DDAE-11.md
+
+
+## DDAE-12 Audit bug fixes and unused-code cleanup
+
+### Approval Record
+
+- Requirements Confirmed Status: confirmed
+- Requirements Confirmed By: Current repository user in this Codex conversation
+- Requirements Confirmer Role: Requesting user / Requirements Approver
+- Requirements Confirmed On: 2026-09-11
+- Requirements Confirmation Evidence: User replied "同意" to the explicit request to approve plans/DDAE-12-audit-fixes-candidate.md, SHA256 5d76c6a3034e1d57deed691d7c84206cb5b041efab316b619baeb21b84e63b2e.
+- Implementation Plan Approved Status: approved
+- Implementation Plan Approved By: Current repository user in this Codex conversation
+- Implementation Plan Approver Role: Requesting user / Implementation Plan Approver
+- Implementation Plan Approved On: 2026-09-11
+- Implementation Plan Approval Evidence: The same explicit approval covers eight bugs, B5/S1, six cleanup groups, regression/design/documentation and retained gates. Canonical heading/table/ID and executable-path normalization is administrative transcription, not new behavior or a claim that the user typed digests.
+- Approved Specification Version: 2.8.0
+- Approved Specification Digest: sha256:047d5ec397aefd4f0187ce8462b2d19b589b3f10d7b26762c6f665e72b2c94cd
+- Approved Plan Basis Digest: sha256:7ee8a85a8af35787827d9944dd7c234ffedfb9deb09c709a51cc90e326419df5
+- Approved Test Plan Digest: sha256:96974e143eaeaf21f48b65863b539117934bcd9332abb17c139765b4573812a2
+
+### Execution Plan Reference
+
+- Execution Plan: plans/DDAE-12.md

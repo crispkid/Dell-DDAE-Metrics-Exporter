@@ -314,3 +314,36 @@ Its canonical records transcribe plans/DDAE-10-history-backfill-candidate.md.
 DDAE-9 and earlier work remain preserved. See plans/DDAE-10.md for progress.
 DDAE-10 is implemented locally with synthetic and authorized Demo functional evidence.
 Inherited release gates, full Harness and independent review remain incomplete.
+
+## Current Kafka SASL Correction
+
+DDAE-11 Specification 2.7.0 is the current user-approved query-only Kafka SASL
+credential-loading correction. The user approved the linked candidate on
+2026-09-11. Canonical approval identities are recorded in DEVELOPMENT_PLAN.md;
+progress and evidence belong in plans/DDAE-11.md. Existing DDAE-10 and earlier
+behavior, histories and incomplete release gates remain preserved. Scope is local
+code, tests and documentation only; no commit, push or new release is authorized.
+
+On 2026-09-11 the user additionally authorized local Docker Kafka testing.
+The supplemental native Kafka SASL/mTLS matrix passed 19 expected outcomes,
+with synthetic HTTPS DDAE inputs and 10 records read by a real consumer.
+See `docs/kafka-auth-validation-2026-09-11.md` and `plans/DDAE-11.md`.
+This does not close the non-production DDAE integration/E2E or release gates.
+
+
+## Current Audit Corrections
+
+DDAE-12 Specification 2.8.0 is the current user-approved audit correction and
+unused-code cleanup. The user replied "同意" to the linked candidate on 2026-09-11.
+Canonical approval evidence is in DEVELOPMENT_PLAN.md; execution/evidence belongs
+in plans/DDAE-12.md. It preserves DDAE-11 and prior work, valid schema 1 state,
+Kafka/metrics/build interfaces and inherited incomplete gates. No migration,
+automatic corrupt-state repair, S2 security-policy change, commit or release is authorized.
+
+## RC5 publication request (2026-09-11)
+
+The current user subsequently requested committing these changes and publishing
+`v1.0.0-rc5`. This authorizes the source commit and release preparation, superseding
+the original DDAE-11/DDAE-12 no-commit scope. Product approval digests and required
+gates remain unchanged. Release publication remains subject to those gates or a
+new explicit test-only publication exception; the RC4 exception was version-specific.
