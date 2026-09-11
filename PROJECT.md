@@ -347,3 +347,10 @@ The current user subsequently requested committing these changes and publishing
 the original DDAE-11/DDAE-12 no-commit scope. Product approval digests and required
 gates remain unchanged. Release publication remains subject to those gates or a
 new explicit test-only publication exception; the RC4 exception was version-specific.
+
+The user then replied "同意" on 2026-09-11 to the explicit proposal to publish
+`v1.0.0-rc5` as a test-only prerelease with all failed/incomplete gates disclosed.
+That version-specific publication exception is now authorized. It permits commit,
+push, tag, build and GitHub prerelease publication, not a supported/GA release,
+deployment, policy bypass, data migration or change to any Verified status.
+See `docs/releases/v1.0.0-rc5.md` for the retained exception and delivery scope.

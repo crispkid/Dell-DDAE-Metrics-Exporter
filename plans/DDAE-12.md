@@ -364,3 +364,12 @@ The source commit is a checkpoint, not a Verified handoff. RC5 publication needs
 the required gates or a separately confirmed test-only exception disclosing the
 remaining security-policy, integration/E2E, independent-review and supply-chain
 limits. The RC4 exception is not silently transferred to RC5.
+
+The user subsequently replied "同意" to the explicit RC5 test-only exception
+question on 2026-09-11. The source checkpoint is
+`c37247c5bbbe047351d41e6d4e5abfb8a2979ace`; a documentation-only follow-up records
+this publication authority. Package the resulting clean commit using the existing
+RC4 platform layout, verify binary identities and archive hashes, and publish
+only a prerelease. Actual packaging/gate results belong in the release's metadata
+and notes. See `docs/releases/v1.0.0-rc5.md`. Full SDD/release acceptance remains
+incomplete; this exception does not change product requirements or test evidence.
